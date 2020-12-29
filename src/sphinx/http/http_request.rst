@@ -127,6 +127,18 @@ For a given request, you can also disable common headers that were defined on th
 
 .. includecode:: code/HttpRequestSample.scala#ignoreProtocolHeaders
 
+.. _http-request-timeout:
+
+Request Timeout
+===============
+
+The default request timeout is controlled by the ```gatling.http.requestTimeout`` configuration parameter.
+
+However, you might want to use ``requestTimeout(timeout: FiniteDuration)``
+to override the global value for a specific request, typically a long file upload or download.
+
+.. includecode:: code/HttpRequestSample.scala#requestTimeout
+
 .. _http-request-signature:
 
 Signature Calculator
@@ -429,6 +441,16 @@ Similar to :ref:`ElFileBody <http-request-body-elfile>`.
 * ``StringBodyPart(name: Expression[String], string: Expression[String])``
 
 Similar to :ref:`StringBody <http-request-body-string>`.
+
+* ``PebbleStringBodyPart(string: String)``
+* ``PebbleStringBodyPart(name: Expression[String], string: String)``
+
+Similar to :ref:`PebbleStringBody <http-request-body-pebble>`.
+
+* ``PebbleFileBodyPart(path: Expression[String])``
+* ``PebbleFileBodyPart(name: Expression[String], path: Expression[String])``
+
+Similar to :ref:`PebbleFileBody <http-request-body-pebble>`.
 
 * ``ByteArrayBodyPart(bytes: Expression[Array[Byte])``
 * ``ByteArrayBodyPart(name: Expression[String], bytes: Expression[Array[Byte])``

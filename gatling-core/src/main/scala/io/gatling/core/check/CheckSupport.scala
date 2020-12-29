@@ -40,11 +40,11 @@ import net.sf.saxon.s9api.XdmNode
 
 trait CheckSupport {
 
-  implicit def validatorCheckBuilder2CheckBuilder[A, P, X](validatorCheckBuilder: ValidatorCheckBuilder[A, P, X]): CheckBuilder[A, P, X] with SaveAs[A, P, X] =
+  implicit def validatorCheckBuilder2CheckBuilder[T, P, X](validatorCheckBuilder: ValidatorCheckBuilder[T, P, X]): CheckBuilder[T, P, X] =
     validatorCheckBuilder.exists
-  implicit def findCheckBuilder2ValidatorCheckBuilder[A, P, X](findCheckBuilder: FindCheckBuilder[A, P, X]): ValidatorCheckBuilder[A, P, X] =
+  implicit def findCheckBuilder2ValidatorCheckBuilder[T, P, X](findCheckBuilder: FindCheckBuilder[T, P, X]): ValidatorCheckBuilder[T, P, X] =
     findCheckBuilder.find
-  implicit def findCheckBuilder2CheckBuilder[A, P, X](findCheckBuilder: FindCheckBuilder[A, P, X]): CheckBuilder[A, P, X] with SaveAs[A, P, X] =
+  implicit def findCheckBuilder2CheckBuilder[T, P, X](findCheckBuilder: FindCheckBuilder[T, P, X]): CheckBuilder[T, P, X] =
     findCheckBuilder.find.exists
 
   def checkIf[C <: Check[_]](condition: Expression[Boolean])(thenCheck: C)(implicit cw: UntypedConditionalCheckWrapper[C]): C =
@@ -60,26 +60,23 @@ trait CheckSupport {
 
   val bodyBytes: FindCheckBuilder[BodyBytesCheckType, Array[Byte], Array[Byte]] = BodyBytesCheckBuilder
 
+  val bodyLength: FindCheckBuilder[BodyBytesCheckType, Int, Int] = BodyLengthCheckBuilder
+
   val bodyStream: FindCheckBuilder[BodyStreamCheckType, () => InputStream, InputStream] = BodyStreamCheckBuilder
 
   def substring(pattern: Expression[String]): MultipleFindCheckBuilder[SubstringCheckType, String, Int] = new SubstringCheckBuilder(pattern)
 
   def xpath(path: Expression[String])(implicit xmlParsers: XmlParsers): MultipleFindCheckBuilder[XPathCheckType, Option[XdmNode], String] =
     xpath(path, Map.empty[String, String])
-  def xpath(path: Expression[String], namespaces: Map[String, String])(
-      implicit xmlParsers: XmlParsers
+  def xpath(path: Expression[String], namespaces: Map[String, String])(implicit
+      xmlParsers: XmlParsers
   ): MultipleFindCheckBuilder[XPathCheckType, Option[XdmNode], String] =
     new XPathCheckBuilder(path, namespaces, xmlParsers)
-  @deprecated(message = "Pass namespaces as a Map instead of a List, will be removed soon", since = "3.4.0")
-  def xpath(path: Expression[String], namespaces: List[(String, String)])(
-      implicit xmlParsers: XmlParsers
-  ): MultipleFindCheckBuilder[XPathCheckType, Option[XdmNode], String] =
-    new XPathCheckBuilder(path, namespaces.toMap, xmlParsers)
 
   def css(selector: Expression[String])(implicit selectors: CssSelectors): MultipleFindCheckBuilder[CssCheckType, NodeSelector, String] with CssOfType =
     CssCheckBuilder.css(selector, None, selectors)
-  def css(selector: Expression[String], nodeAttribute: String)(
-      implicit selectors: CssSelectors
+  def css(selector: Expression[String], nodeAttribute: String)(implicit
+      selectors: CssSelectors
   ): MultipleFindCheckBuilder[CssCheckType, NodeSelector, String] with CssOfType =
     CssCheckBuilder.css(selector, Some(nodeAttribute), selectors)
   def form(selector: Expression[String])(implicit selectors: CssSelectors): MultipleFindCheckBuilder[CssCheckType, NodeSelector, Map[String, Any]] =

@@ -27,10 +27,10 @@ import scala.util.control.NonFatal
 import scala.util.parsing.combinator.RegexParsers
 
 import io.gatling.commons.NotNothing
-import io.gatling.commons.util.NumberHelper._
+import io.gatling.commons.util.Spire._
 import io.gatling.commons.util.StringHelper._
 import io.gatling.commons.util.TypeCaster
-import io.gatling.commons.util.TypeHelper._
+import io.gatling.commons.util.TypeHelper
 import io.gatling.commons.validation._
 import io.gatling.core.json.Json
 import io.gatling.core.session._
@@ -61,7 +61,7 @@ final case class AttributePart(name: String) extends ElPart[Any] {
 final case class SizePart(seqPart: ElPart[Any], name: String) extends ElPart[Int] {
   def apply(session: Session): Validation[Int] =
     seqPart(session).flatMap {
-      case t: Traversable[_]            => t.size.success
+      case t: Iterable[_]               => t.size.success
       case collection: ju.Collection[_] => collection.size.success
       case map: ju.Map[_, _]            => map.size.success
       case arr: Array[_]                => arr.length.success
@@ -104,9 +104,17 @@ final case class JsonStringify(part: ElPart[Any], name: String) extends ElPart[S
   def apply(session: Session): Validation[String] =
     part(session) match {
       case Success(value)   => Json.stringify(value, isRootObject = false).success
-      case NullValueFailure => NullStringSuccess
-      case failure: Failure => failure
+      case failure: Failure => if (TypeHelper.isNullValueFailure(failure)) NullStringSuccess else failure
     }
+}
+
+private class IntStringOpt(val s: String) extends AnyVal {
+  def isEmpty: Boolean = s.exists(char => char < '0' || char > '9')
+  def get: Int = s.toInt
+}
+
+private object IntString {
+  def unapply(s: String): IntStringOpt = new IntStringOpt(s)
 }
 
 final case class SeqElementPart(seq: ElPart[Any], seqName: String, index: String) extends ElPart[Any] {
@@ -141,6 +149,16 @@ final case class SeqElementPart(seq: ElPart[Any], seqName: String, index: String
 
 final case class MapKeyPart(map: ElPart[Any], mapName: String, key: String) extends ElPart[Any] {
 
+  @SuppressWarnings(Array("org.wartremover.warts.Return"))
+  private def lookup(product: Product): Validation[Any] = {
+    cfor(0)(_ < product.productArity, _ + 1) { i =>
+      if (product.productElementName(i) == key) {
+        return product.productElement(i).success
+      }
+    }
+    ElMessages.undefinedMapKey(mapName, key)
+  }
+
   def apply(session: Session): Validation[Any] = map(session).flatMap {
     case m: Map[_, _] =>
       m.asInstanceOf[Map[Any, _]].get(key) match {
@@ -151,6 +169,8 @@ final case class MapKeyPart(map: ElPart[Any], mapName: String, key: String) exte
     case map: ju.Map[_, _] =>
       if (map.containsKey(key)) map.get(key).success
       else ElMessages.undefinedMapKey(mapName, key)
+
+    case product: Product => lookup(product)
 
     case other => ElMessages.accessByKeyNotSupported(other, mapName)
   }
@@ -178,7 +198,8 @@ class ElParserException(string: String, msg: String) extends Exception(s"Failed 
 
 object ElCompiler {
 
-  private val NameRegex = "[^.${}()]+".r
+  private val NameRegex = """[^\.${}\(\)]+""".r
+  private val DateFormatRegex = """[^${}\(\)]+""".r
   private val NumberRegex = "[0-9]+".r
   private val DynamicPartStart = "${".toCharArray
 
@@ -196,11 +217,11 @@ object ElCompiler {
         if (runtimeClass == classOf[String] || runtimeClass == classOf[Any] || runtimeClass == classOf[Object]) {
           StaticValueExpression(staticStr).asInstanceOf[Expression[T]]
         } else {
-          val stringV = staticStr.asValidation[T]
+          val stringV = TypeHelper.validate[T](staticStr)
           _ => stringV
         }
 
-      case dynamicPart :: Nil => dynamicPart(_).flatMap(_.asValidation[T])
+      case dynamicPart :: Nil => dynamicPart(_).flatMap(TypeHelper.validate[T])
 
       case parts =>
         (session: Session) =>
@@ -215,7 +236,7 @@ object ElCompiler {
                   } yield sb.append(part)
               }
             }
-            .flatMap(_.toString.asValidation[T])
+            .flatMap(value => TypeHelper.validate[T](value.toString))
     }
 }
 
@@ -248,9 +269,9 @@ class ElCompiler private extends RegexParsers {
     }
   }
 
-  private val expr: Parser[List[ElPart[Any]]] = multivaluedExpr | (elExpr ^^ (_ :: Nil))
+  private val expr: Parser[List[ElPart[Any]]] = multivaluedExpr | elExpr.^^(_ :: Nil)
 
-  private def multivaluedExpr: Parser[List[ElPart[Any]]] = (elExpr | staticPart) *
+  private def multivaluedExpr: Parser[List[ElPart[Any]]] = (elExpr | staticPart).*
 
   private val staticPartPattern: Parser[List[String]] = new Parser[String] {
     override def apply(in: Input): ParseResult[String] = {
@@ -282,15 +303,18 @@ class ElCompiler private extends RegexParsers {
   }
 
   private def staticPart: Parser[StaticPart] =
-    staticPartPattern ^? ({
-      case staticStr if staticStr.nonEmpty => StaticPart(staticStr.mkString)
-    }, _ => "Not a static part")
+    staticPartPattern.^?(
+      {
+        case staticStr if staticStr.nonEmpty => StaticPart(staticStr.mkString)
+      },
+      _ => "Not a static part"
+    )
 
   private def elExpr: Parser[ElPart[Any]] = "${" ~> (nonSessionObject | sessionObject | emptyAttribute) <~ "}"
 
   private def currentTimeMillis: Parser[ElPart[Any]] = "currentTimeMillis()" ^^ (_ => CurrentTimeMillisPart)
 
-  private def currentDate: Parser[ElPart[Any]] = "currentDate(" ~> NameRegex <~ ")" ^^ (format => CurrentDateTimePart(new SimpleDateFormat(format)))
+  private def currentDate: Parser[ElPart[Any]] = "currentDate(" ~> DateFormatRegex <~ ")" ^^ (format => CurrentDateTimePart(new SimpleDateFormat(format)))
 
   private def nonSessionObject: Parser[ElPart[Any]] = currentTimeMillis | currentDate
 
@@ -325,7 +349,7 @@ class ElCompiler private extends RegexParsers {
       }
     }
 
-    objectName ~ (valueAccess *) ^^ { case objectPart ~ accessTokens => sessionObjectRec(accessTokens, objectPart, objectPart.name) }
+    objectName ~ valueAccess.* ^^ { case objectPart ~ accessTokens => sessionObjectRec(accessTokens, objectPart, objectPart.name) }
   }
 
   private def objectName: Parser[AttributePart] = NameRegex ^^ (AttributePart(_))

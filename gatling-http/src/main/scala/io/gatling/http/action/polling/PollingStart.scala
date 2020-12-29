@@ -49,7 +49,7 @@ class PollingStart(
   override def statsEngine: StatsEngine = coreComponents.statsEngine
 
   private def startPoller(session: Session): Session = {
-    logger.info(s"Starting poller $pollerName")
+    logger.debug(s"Starting poller $pollerName")
     val poller = new Poller(
       pollerName,
       period,
@@ -57,8 +57,7 @@ class PollingStart(
       httpTxExecutor,
       httpCaches,
       httpProtocol,
-      statsEngine,
-      clock
+      statsEngine
     )
 
     val newSession = session.set(pollerName, poller)

@@ -21,12 +21,12 @@ import java.nio.file.{ Path, Paths }
 import java.util.ResourceBundle
 import javax.net.ssl.{ KeyManagerFactory, SSLContext, TrustManagerFactory }
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
+import io.gatling.commons.shared.unstable.util.Ssl
 import io.gatling.commons.util.ConfigHelper._
-import io.gatling.commons.util.Ssl
 import io.gatling.commons.util.StringHelper._
 import io.gatling.core.ConfigKeys._
 import io.gatling.core.stats.writer._
@@ -145,7 +145,7 @@ object GatlingConfiguration extends StrictLogging {
 
   private def socketConfiguration(config: Config) =
     new SocketConfiguration(
-      connectTimeout = config.getInt(socket.ConnectTimeout) millis,
+      connectTimeout = config.getInt(socket.ConnectTimeout).millis,
       tcpNoDelay = config.getBoolean(socket.TcpNoDelay),
       soKeepAlive = config.getBoolean(socket.SoKeepAlive),
       soReuseAddress = config.getBoolean(socket.SoReuseAddress)
@@ -175,12 +175,12 @@ object GatlingConfiguration extends StrictLogging {
     new SslConfiguration(
       useOpenSsl = useOpenSsl,
       useOpenSslFinalizers = config.getBoolean(ssl.UseOpenSslFinalizers),
-      handshakeTimeout = config.getInt(ssl.HandshakeTimeout) millis,
+      handshakeTimeout = config.getInt(ssl.HandshakeTimeout).millis,
       useInsecureTrustManager = config.getBoolean(ssl.UseInsecureTrustManager),
       enabledProtocols = enabledProtocols,
       enabledCipherSuites = config.getStringList(ssl.EnabledCipherSuites).asScala.toList,
       sessionCacheSize = config.getInt(ssl.SessionCacheSize),
-      sessionTimeout = config.getInt(ssl.SessionTimeout) seconds,
+      sessionTimeout = config.getInt(ssl.SessionTimeout).seconds,
       enableSni = config.getBoolean(ssl.EnableSni),
       keyManagerFactory = {
         val storeType = config.getString(ssl.keyStore.Type).trimToOption
@@ -228,8 +228,8 @@ object GatlingConfiguration extends StrictLogging {
       perUserCacheMaxCapacity = config.getInt(http.PerUserCacheMaxCapacity),
       warmUpUrl = config.getString(http.WarmUpUrl).trimToOption,
       enableGA = config.getBoolean(http.EnableGA),
-      requestTimeout = config.getInt(http.RequestTimeout) millis,
-      pooledConnectionIdleTimeout = config.getInt(http.PooledConnectionIdleTimeout) millis,
+      requestTimeout = config.getInt(http.RequestTimeout).millis,
+      pooledConnectionIdleTimeout = config.getInt(http.PooledConnectionIdleTimeout).millis,
       enableHostnameVerification = {
         val enable = config.getBoolean(http.EnableHostnameVerification)
         if (!enable) {
@@ -239,28 +239,28 @@ object GatlingConfiguration extends StrictLogging {
         enable
       },
       dns = new DnsConfiguration(
-        queryTimeout = config.getInt(http.dns.QueryTimeout) millis,
+        queryTimeout = config.getInt(http.dns.QueryTimeout).millis,
         maxQueriesPerResolve = config.getInt(http.dns.MaxQueriesPerResolve)
       )
     )
 
   private def jmsConfiguration(config: Config) =
     new JmsConfiguration(
-      replyTimeoutScanPeriod = config.getLong(jms.ReplyTimeoutScanPeriod) millis
+      replyTimeoutScanPeriod = config.getLong(jms.ReplyTimeoutScanPeriod).millis
     )
 
   private def dataConfiguration(config: Config) =
     new DataConfiguration(
-      dataWriters = config.getStringList(data.Writers).asScala.flatMap(DataWriterType.findByName(_).toList),
+      dataWriters = config.getStringList(data.Writers).asScala.flatMap(DataWriterType.findByName(_).toList).toSeq,
       console = new ConsoleDataWriterConfiguration(
         light = config.getBoolean(data.console.Light),
-        writePeriod = config.getInt(data.console.WritePeriod) seconds
+        writePeriod = config.getInt(data.console.WritePeriod).seconds
       ),
       file = new FileDataWriterConfiguration(
         bufferSize = config.getInt(data.file.BufferSize)
       ),
       leak = new LeakDataWriterConfiguration(
-        noActivityTimeout = config.getInt(data.leak.NoActivityTimeout) seconds
+        noActivityTimeout = config.getInt(data.leak.NoActivityTimeout).seconds
       ),
       graphite = new GraphiteDataWriterConfiguration(
         light = config.getBoolean(data.graphite.Light),
@@ -269,7 +269,7 @@ object GatlingConfiguration extends StrictLogging {
         protocol = TransportProtocol(config.getString(data.graphite.Protocol).trim),
         rootPathPrefix = config.getString(data.graphite.RootPathPrefix),
         bufferSize = config.getInt(data.graphite.BufferSize),
-        writePeriod = config.getInt(data.graphite.WritePeriod) seconds
+        writePeriod = config.getInt(data.graphite.WritePeriod).seconds
       )
     )
 
@@ -282,38 +282,10 @@ object GatlingConfiguration extends StrictLogging {
       charting = chartingConfiguration(config),
       http = httpConfiguration(config),
       jms = jmsConfiguration(config),
-      data = dataConfiguration(config),
+      data = dataConfiguration(config)
       // [fl]
       //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
-      //
       // [fl]
-      config = config
     )
 }
 
@@ -463,18 +435,6 @@ final class GraphiteDataWriterConfiguration(
     val writePeriod: FiniteDuration
 )
 
-// [fl]
-//
-//
-//
-//
-//
-//
-//
-//
-//
-// [fl]
-
 final class GatlingConfiguration(
     val core: CoreConfiguration,
     val socket: SocketConfiguration,
@@ -483,9 +443,8 @@ final class GatlingConfiguration(
     val charting: ChartingConfiguration,
     val http: HttpConfiguration,
     val jms: JmsConfiguration,
-    val data: DataConfiguration,
+    val data: DataConfiguration
     // [fl]
     //
     // [fl]
-    val config: Config
 )

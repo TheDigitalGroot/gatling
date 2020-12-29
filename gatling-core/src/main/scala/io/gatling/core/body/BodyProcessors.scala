@@ -16,9 +16,6 @@
 
 package io.gatling.core.body
 
-import java.io.FileInputStream
-import java.nio.charset.Charset
-
 import io.gatling.commons.util.{ FastByteArrayInputStream, GzipHelper }
 
 object BodyProcessors {
@@ -26,16 +23,14 @@ object BodyProcessors {
   def gzip: Body => ByteArrayBody =
     (body: Body) => {
       val gzippedBytes = body match {
-        case StringBody(string, _)    => string.map(GzipHelper.gzip)
-        case pebbleBody: PebbleBody   => pebbleBody.map(GzipHelper.gzip)
-        case ByteArrayBody(byteArray) => byteArray.map(GzipHelper.gzip)
+        case StringBody(string, charset) => string.map(GzipHelper.gzip(_, charset))
+        case ByteArrayBody(byteArray)    => byteArray.map(GzipHelper.gzip)
         case RawFileBody(resourceAndCachedBytes) =>
-          resourceAndCachedBytes.map {
-            case ResourceAndCachedBytes(resource, cachedBytes) =>
-              cachedBytes match {
-                case Some(bytes) => GzipHelper.gzip(bytes)
-                case _           => GzipHelper.gzip(new FileInputStream(resource.file))
-              }
+          resourceAndCachedBytes.map { case ResourceAndCachedBytes(resource, cachedBytes) =>
+            cachedBytes match {
+              case Some(bytes) => GzipHelper.gzip(bytes)
+              case _           => GzipHelper.gzip(resource.inputStream)
+            }
           }
         case InputStreamBody(inputStream) => inputStream.map(GzipHelper.gzip)
         case b: ElBody                    => b.asStream.map(GzipHelper.gzip)
@@ -44,19 +39,17 @@ object BodyProcessors {
       ByteArrayBody(gzippedBytes)
     }
 
-  def stream(charset: Charset): Body => InputStreamBody =
+  def stream: Body => InputStreamBody =
     (body: Body) => {
       val stream = body match {
         case StringBody(string, charset) => string.map(s => new FastByteArrayInputStream(s.getBytes(charset)))
-        case pebbleBody: PebbleBody      => pebbleBody.map(string => new FastByteArrayInputStream(string.getBytes(charset)))
         case ByteArrayBody(byteArray)    => byteArray.map(new FastByteArrayInputStream(_))
         case RawFileBody(resourceAndCachedBytes) =>
-          resourceAndCachedBytes.map {
-            case ResourceAndCachedBytes(resource, cachedBytes) =>
-              cachedBytes match {
-                case Some(bytes) => new FastByteArrayInputStream(bytes)
-                case _           => new FileInputStream(resource.file)
-              }
+          resourceAndCachedBytes.map { case ResourceAndCachedBytes(resource, cachedBytes) =>
+            cachedBytes match {
+              case Some(bytes) => new FastByteArrayInputStream(bytes)
+              case _           => resource.inputStream
+            }
           }
         case InputStreamBody(inputStream) => inputStream
         case b: ElBody                    => b.asStream

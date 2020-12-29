@@ -20,7 +20,6 @@ import java.util.concurrent.{ ScheduledFuture, TimeUnit }
 
 import scala.concurrent.duration.FiniteDuration
 
-import io.gatling.commons.util.Clock
 import io.gatling.commons.validation.{ Success, Validation }
 import io.gatling.core.action.Action
 import io.gatling.core.session.Session
@@ -41,15 +40,16 @@ private[polling] class Poller(
     httpTxExecutor: HttpTxExecutor,
     httpCaches: HttpCaches,
     httpProtocol: HttpProtocol,
-    statsEngine: StatsEngine,
-    clock: Clock
+    statsEngine: StatsEngine
 ) extends StrictLogging {
 
   private var session: Session = _
   private var timer: ScheduledFuture[_] = _
 
-  def start(session: Session): Unit =
+  def start(session: Session): Unit = {
+    this.session = session
     timer = session.eventLoop.scheduleAtFixedRate(() => poll(), 0, period.toMillis, TimeUnit.MILLISECONDS)
+  }
 
   // FIXME is currently static
   private def buildHttpTx(): Validation[HttpTx] =
@@ -90,8 +90,7 @@ private[polling] class Poller(
         tx.request.clientRequest,
         tx.request.requestConfig.checks,
         httpCaches,
-        httpProtocol,
-        clock
+        httpProtocol
       ),
       statsProcessor = httpTxExecutor.statsProcessor(tx),
       tx.request.requestConfig.defaultCharset

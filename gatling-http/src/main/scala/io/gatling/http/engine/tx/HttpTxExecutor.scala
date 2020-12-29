@@ -39,7 +39,6 @@ class HttpTxExecutor(
     with StrictLogging {
 
   import coreComponents._
-  private val noopStatsProcessor = new NoopStatsProcessor(configuration.core.charset)
 
   private val resourceFetcher = new ResourceFetcher(coreComponents, httpCaches, httpProtocol, httpTxExecutor = this)
 
@@ -59,13 +58,13 @@ class HttpTxExecutor(
       case _ =>
         resourceFetcher.newResourceAggregatorForCachedPage(tx) match {
           case Some(aggregator) =>
-            logger.info(
+            logger.debug(
               s"Fetching resources of cached page request=${tx.request.requestName} uri=$uri: scenario=${tx.session.scenario}, userId=${tx.session.userId}"
             )
             aggregator.start(tx.session)
 
           case _ =>
-            logger.info(s"Skipping cached request=${tx.request.requestName} uri=$uri: scenario=${tx.session.scenario}, userId=${tx.session.userId}")
+            logger.debug(s"Skipping cached request=${tx.request.requestName} uri=$uri: scenario=${tx.session.scenario}, userId=${tx.session.userId}")
             tx.resourceTx match {
               case Some(ResourceTx(aggregator, _)) => aggregator.onCachedResource(uri, tx)
               case _                               => tx.next ! tx.session
@@ -103,11 +102,13 @@ class HttpTxExecutor(
       resourceFetcher.newResourceAggregatorForCachedPage(tx) match {
         case Some(aggregator) =>
           logger
-            .info(s"Fetching resources of cached page request=${tx.request.requestName} uri=$uri: scenario=${tx.session.scenario}, userId=${tx.session.userId}")
+            .debug(
+              s"Fetching resources of cached page request=${tx.request.requestName} uri=$uri: scenario=${tx.session.scenario}, userId=${tx.session.userId}"
+            )
           aggregator.start(tx.session)
 
         case _ =>
-          logger.info(s"Skipping cached request=${tx.request.requestName} uri=$uri: scenario=${tx.session.scenario}, userId=${tx.session.userId}")
+          logger.debug(s"Skipping cached request=${tx.request.requestName} uri=$uri: scenario=${tx.session.scenario}, userId=${tx.session.userId}")
           tx.resourceTx match {
             case Some(ResourceTx(aggregator, _)) => aggregator.onCachedResource(uri, tx)
             case _                               =>
@@ -163,11 +164,10 @@ class HttpTxExecutor(
   def execute(origTxs: Iterable[HttpTx], responseProcessorFactory: HttpTx => ResponseProcessor): Unit = {
     executeHttp2WithCache(origTxs) { txs =>
       val headTx = txs.head
-      txs.foreach(
-        tx =>
-          logger.debug(
-            s"Sending request=${tx.request.requestName} uri=${tx.request.clientRequest.getUri} scenario=${tx.session.scenario}, userId=${tx.session.userId}"
-          )
+      txs.foreach(tx =>
+        logger.debug(
+          s"Sending request=${tx.request.requestName} uri=${tx.request.clientRequest.getUri} scenario=${tx.session.scenario}, userId=${tx.session.userId}"
+        )
       )
       val requestsAndListeners = txs.map { tx =>
         val listener: HttpListener = new GatlingHttpListener(tx, coreComponents.clock, responseProcessorFactory(tx))
@@ -205,8 +205,7 @@ class HttpTxExecutor(
         tx.request.clientRequest,
         tx.request.requestConfig.checks,
         httpCaches,
-        httpProtocol,
-        clock
+        httpProtocol
       ),
       statsProcessor = statsProcessor(tx),
       nextExecutor = new RootNextExecutor(tx, resourceFetcher, this),
@@ -221,8 +220,7 @@ class HttpTxExecutor(
         tx.request.clientRequest,
         tx.request.requestConfig.checks,
         httpCaches,
-        httpProtocol,
-        clock
+        httpProtocol
       ),
       statsProcessor = statsProcessor(tx),
       nextExecutor = new ResourceNextExecutor(tx, resourceTx),
@@ -230,5 +228,5 @@ class HttpTxExecutor(
     )
 
   def statsProcessor(tx: HttpTx): StatsProcessor =
-    if (tx.silent) noopStatsProcessor else defaultStatsProcessor
+    if (tx.silent) NoopStatsProcessor else defaultStatsProcessor
 }

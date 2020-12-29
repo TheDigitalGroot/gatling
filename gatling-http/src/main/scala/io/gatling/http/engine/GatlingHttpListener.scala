@@ -23,7 +23,6 @@ import scala.util.control.NonFatal
 
 import io.gatling.commons.util.Clock
 import io.gatling.commons.util.Hex.toHexString
-import io.gatling.commons.util.Maps._
 import io.gatling.commons.util.Throwables._
 import io.gatling.http.client.HttpListener
 import io.gatling.http.engine.response.ResponseProcessor
@@ -47,7 +46,7 @@ object GatlingHttpListener extends StrictLogging {
   }
 
   private def logRequestCrash(tx: HttpTx, throwable: Throwable): Unit =
-    logger.info(s"Request '${tx.request.requestName}' failed for user ${tx.session.userId}", throwable)
+    logger.debug(s"Request '${tx.request.requestName}' failed for user ${tx.session.userId}", throwable)
 
   // [fl]
   //
@@ -169,7 +168,7 @@ class GatlingHttpListener(tx: HttpTx, clock: Clock, responseProcessor: ResponseP
         // ensure response doesn't end before starting
         requestEndTimestamp = max(requestEndTimestamp, requestStartTimestamp)
 
-        val checksums = digests.forceMapValues(md => toHexString(md.digest))
+        val checksums = digests.view.mapValues(md => toHexString(md.digest)).to(Map)
 
         val chunksOrderedByArrival = chunks.reverse
         val body = ResponseBody(bodyLength, chunksOrderedByArrival, resolveCharset(headers, defaultCharset))

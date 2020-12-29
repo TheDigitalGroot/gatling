@@ -27,22 +27,17 @@ object BuildSettings {
   lazy val skipPublishing =
     skip in publish := true
 
-  lazy val noArtifactToPublish =
-    publishArtifact in Compile := false
+  lazy val noSrcToPublish =
+    publishArtifact in packageDoc in Compile := false
 
-  // [fl]
-  //
-  //
-  //
-  //
-  //
-  // [fl]
+  lazy val noDocToPublish =
+    publishArtifact in packageSrc in Compile := false
 
   val developers = Seq(
     GatlingDeveloper("slandelle@gatling.io", "Stephane Landelle", isGatlingCorp = true),
     GatlingDeveloper("gcorre@gatling.io", "Guillaume Corré", isGatlingCorp = true),
     GatlingDeveloper("ccousseran@gatling.io", "Cédric Cousseran", isGatlingCorp = true),
-    GatlingDeveloper("achaouat@gatling.io", "Alexandre Chaouat", isGatlingCorp = true)
+    GatlingDeveloper("tpetillot@gatling.io  ", "Thomas Petillot", isGatlingCorp = true)
   )
 
   // UTF-8

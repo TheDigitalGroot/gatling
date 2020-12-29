@@ -23,13 +23,13 @@ import scala.concurrent.{ Await, Promise }
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
+import io.gatling.commons.util.Clock
 import io.gatling.commons.util.Throwables._
 import io.gatling.core.CoreComponents
 import io.gatling.core.config.GatlingConfiguration
 import io.gatling.core.session._
-import io.gatling.core.util.NameGen
 import io.gatling.http.client.{ HttpClient, HttpListener, Request, RequestBuilder }
-import io.gatling.http.client.resolver.InetAddressNameResolverWrapper
+import io.gatling.http.client.resolver._
 import io.gatling.http.client.uri.Uri
 import io.gatling.http.client.util.Pair
 import io.gatling.http.protocol.HttpComponents
@@ -48,7 +48,7 @@ object HttpEngine {
   def apply(coreComponents: CoreComponents): HttpEngine = {
     val sslContextsFactory = new SslContextsFactory(coreComponents.configuration.ssl)
     val httpClient = new HttpClientFactory(sslContextsFactory, coreComponents.configuration).newClient
-    new HttpEngine(sslContextsFactory, httpClient, coreComponents.eventLoopGroup, coreComponents.configuration)
+    new HttpEngine(sslContextsFactory, httpClient, coreComponents.eventLoopGroup, coreComponents.clock, coreComponents.configuration)
   }
 }
 
@@ -56,23 +56,23 @@ class HttpEngine(
     sslContextsFactory: SslContextsFactory,
     httpClient: HttpClient,
     eventLoopGroup: EventLoopGroup,
+    clock: Clock,
     configuration: GatlingConfiguration
 ) extends AutoCloseable
-    with NameGen
     with StrictLogging {
 
   private[this] var warmedUp = false
 
   def warmUp(httpComponents: HttpComponents): Unit =
     if (!warmedUp) {
-      logger.info("Start warm up")
+      logger.debug("Start warm up")
       warmedUp = true
 
       import httpComponents._
 
       httpProtocol.warmUpUrl match {
         case Some(url) =>
-          val requestBuilder = new RequestBuilder(HttpMethod.GET, Uri.create(url))
+          val requestBuilder = new RequestBuilder(HttpMethod.GET, Uri.create(url), InetAddressNameResolver.JAVA_RESOLVER)
             .setHeaders(
               new DefaultHttpHeaders()
                 .add(HttpHeaderNames.ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
@@ -88,7 +88,7 @@ class HttpEngine(
           val eventLoop = eventLoopGroup.next()
 
           try {
-            val p = Promise[Unit]
+            val p = Promise[Unit]()
             httpClient.sendRequest(
               requestBuilder.build,
               0,
@@ -106,14 +106,14 @@ class HttpEngine(
               null,
               null
             )
-            Await.result(p.future, 2 seconds)
+            Await.result(p.future, 2.seconds)
             logger.debug(s"Warm up request $url successful")
           } catch {
             case NonFatal(e) =>
               if (logger.underlying.isDebugEnabled)
                 logger.debug(s"Couldn't execute warm up request $url", e)
               else
-                logger.info(s"Couldn't execute warm up request $url: ${e.rootMessage}")
+                logger.debug(s"Couldn't execute warm up request $url: ${e.rootMessage}")
           } finally {
             httpClient.flushClientIdChannels(0, eventLoop)
           }
@@ -134,7 +134,7 @@ class HttpEngine(
             .build(httpComponents.httpCaches, httpComponents.httpProtocol, throttled = false, configuration)
       }
 
-      logger.info("Warm up done")
+      logger.debug("Warm up done")
     }
 
   def executeRequest(
@@ -162,7 +162,23 @@ class HttpEngine(
       httpClient.sendHttp2Requests(requestsAndListeners.toArray, if (shared) -1 else clientId, eventLoop, sslContext, alpnSslContext)
     }
 
-  def newAsyncDnsNameResolver(eventLoop: EventLoop, dnsServers: Array[InetSocketAddress]): InetAddressNameResolverWrapper =
+  // [fl]
+  //
+  //
+  //
+  //
+  //
+  //
+  //
+  //
+  // [fl]
+
+  // [fl]
+  def newJavaDnsNameResolver: InetAddressNameResolver =
+    InetAddressNameResolver.JAVA_RESOLVER
+
+  // [fl]
+  def newAsyncDnsNameResolver(eventLoop: EventLoop, dnsServers: Array[InetSocketAddress]): InetAddressNameResolver =
     new InetAddressNameResolverWrapper(
       new DnsNameResolverBuilder(eventLoop)
         .channelFactory(Transports.newDatagramChannelFactory(configuration.netty.useNativeTransport))

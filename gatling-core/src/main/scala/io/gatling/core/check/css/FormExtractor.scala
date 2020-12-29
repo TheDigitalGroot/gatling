@@ -39,12 +39,15 @@ private[css] object FormExtractor {
       if !name.isEmpty && !node.hasAttribute("disabled")
       typeAttr <- Option(node.getAttribute("type")).map(_.toLowerCase(Locale.ROOT))
       checked = node.hasAttribute("checked")
-      if !IgnoredInputTypes.contains(typeAttr) && (typeAttr != "radio" || checked) // discard unchecked radios, but we want the information that a checkbox was multiple
-      value <- if (typeAttr == "checkbox") {
-        Option(node.getAttribute("value")).orElse(Some("on"))
-      } else {
-        Option(node.getAttribute("value"))
-      }
+      if !IgnoredInputTypes.contains(
+        typeAttr
+      ) && (typeAttr != "radio" || checked) // discard unchecked radios, but we want the information that a checkbox was multiple
+      value <-
+        if (typeAttr == "checkbox") {
+          Option(node.getAttribute("value")).orElse(Some("on"))
+        } else {
+          Option(node.getAttribute("value"))
+        }
     } yield typeAttr match {
       case "radio"    => RadioInput(name, value)
       case "checkbox" => CheckboxInput(name, value, checked)
@@ -63,8 +66,8 @@ private[css] object FormExtractor {
         option <- child.getNodeName match {
           case "option" =>
             Option(child.getAttribute("value")) match {
-              case Some(value) if !value.isEmpty => SelectOption(value, child.hasAttribute("selected")) :: values
-              case _                             => values
+              case Some(value) => SelectOption(value, child.hasAttribute("selected")) :: values
+              case _           => values
             }
           case _ =>
             extractOptions(child, values)
@@ -119,12 +122,14 @@ private[css] object FormExtractor {
   }
 
   private def filterNonCheckedCheckboxes(groupedInputs: Map[String, Seq[SingleValueInput]]): Map[String, Seq[SingleValueInput]] =
-    groupedInputs.mapValues { inputs =>
-      inputs.filter {
-        case CheckboxInput(_, _, checked) => checked
-        case _                            => true
+    groupedInputs.view
+      .mapValues { inputs =>
+        inputs.filter {
+          case CheckboxInput(_, _, checked) => checked
+          case _                            => true
+        }
       }
-    }
+      .to(Map)
 
   def extractFormInputs(node: Node): Map[String, Any] = {
 

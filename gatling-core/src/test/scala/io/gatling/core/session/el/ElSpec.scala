@@ -19,16 +19,23 @@ package io.gatling.core.session.el
 import java.{ util => ju }
 
 import io.gatling.{ BaseSpec, ValidationValues }
+import io.gatling.commons.validation.Success
+import io.gatling.core.EmptySession
 import io.gatling.core.config.GatlingConfiguration
-import io.gatling.core.session.SessionSpec.EmptySession
 import io.gatling.core.session.el
 
-class ElSpec extends BaseSpec with ValidationValues {
+private final case class Foo(bar: String, baz: Int)
+
+private final case class Bar(baz: Baz)
+
+private final case class Baz(qix: String)
+
+class ElSpec extends BaseSpec with ValidationValues with EmptySession {
 
   private implicit val configuration: GatlingConfiguration = GatlingConfiguration.loadForTest()
 
   private def newSession(attributes: Map[String, Any]) =
-    EmptySession.copy(attributes = attributes)
+    emptySession.copy(attributes = attributes)
 
   "Static String" should "return itself" in {
     val session = newSession(Map.empty)
@@ -338,6 +345,30 @@ class ElSpec extends BaseSpec with ValidationValues {
     expression(session).failed shouldBe ElMessages.accessByKeyNotSupported(1, "i").message
   }
 
+  it should "support case classes String attribute" in {
+    val session = newSession(Map("foo" -> Foo("hello", 1)))
+    val expression = "${foo.bar}".el[String]
+    expression(session).succeeded shouldBe "hello"
+  }
+
+  it should "support case classes Int attribute" in {
+    val session = newSession(Map("foo" -> Foo("hello", 1)))
+    val expression = "${foo.baz}".el[Int]
+    expression(session).succeeded shouldBe 1
+  }
+
+  it should "handle wrong key" in {
+    val session = newSession(Map("foo" -> Foo("hello", 1)))
+    val expression = "${foo.qix}".el[String]
+    expression(session).failed shouldBe ElMessages.undefinedMapKey("foo", "qix").message
+  }
+
+  it should "handle deeply nested case classes" in {
+    val session = newSession(Map("bar" -> Bar(Baz("fux"))))
+    val expression = "${bar.baz.qix}".el[String]
+    expression(session).succeeded shouldBe "fux"
+  }
+
   "multiple level access" should "return an element of a sub-list" in {
     val lst = List(List(1, 2), List(3, 4))
     val session = newSession(Map("lst" -> lst))
@@ -567,10 +598,13 @@ class ElSpec extends BaseSpec with ValidationValues {
   }
 
   "currentDate" should "generate a String" in {
-    val session = newSession(Map("foo" -> "bar"))
-    val pattern = "yyyy-MM-dd HH:mm:ss"
-    val currentDateExpression = s"$${currentDate($pattern)}".el[String]
-    currentDateExpression(session).succeeded.length shouldBe pattern.length
+    val currentDateExpression = """${currentDate(yyyy-MM-dd HH:mm:ss)}""".el[String]
+    currentDateExpression(emptySession) shouldBe a[Success[_]]
+  }
+
+  it should "support patterns with a dot" in {
+    val currentDateExpression = """${currentDate("YYYY-MM-dd'T'HH:mm:ss.SSSMs'Z'")}""".el[String]
+    currentDateExpression(emptySession) shouldBe a[Success[_]]
   }
 
   "Escaping" should "turn $${ into ${" in {

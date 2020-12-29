@@ -18,22 +18,17 @@ package io.gatling.core.check.css
 
 import java.{ util => ju }
 
-import scala.collection._
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.gatling.core.util.cache.Cache
 
 import com.github.benmanes.caffeine.cache.LoadingCache
 import jodd.csselly.{ CSSelly, CssSelector }
 import jodd.lagarto.dom.NodeSelector
-import jodd.log.LoggerFactory
-import jodd.log.impl.Slf4jLogger
 
 class CssSelectors(cacheMaxCapacity: Long) {
 
-  LoggerFactory.setLoggerProvider(Slf4jLogger.PROVIDER)
-
-  private val domBuilder = Jodd.newLagartoDomBuilder
+  private val domBuilder = Lagarto.newLagartoDomBuilder
   private val selectorCache: LoadingCache[String, ju.List[ju.List[CssSelector]]] =
     Cache.newConcurrentLoadingCache(cacheMaxCapacity, CSSelly.parse)
 
@@ -47,8 +42,8 @@ class CssSelectors(cacheMaxCapacity: Long) {
     selector
       .select(selectors)
       .asScala
-      .flatMap { node =>
-        NodeConverter[X].convert(node, nodeAttribute).toList
-      }(breakOut)
+      .view
+      .flatMap(node => NodeConverter[X].convert(node, nodeAttribute).toList)
+      .to(Vector)
   }
 }

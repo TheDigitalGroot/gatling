@@ -50,8 +50,8 @@ private[scenario] class ExtractedUris(scenarioElements: Seq[ScenarioElement]) {
 
     var tmpValues: List[Value] = Nil
 
-    val tmpRenders = uriGroupedByHost.zipWithIndex.flatMap {
-      case ((_, uris), index) =>
+    val tmpRenders = uriGroupedByHost.view.zipWithIndex
+      .flatMap { case ((_, uris), index) =>
         val valName = "uri" + (index + 1).toString.leftPad(maxNbDigits, "0")
 
         if (uris.size == 1 || schemesPortAreSame(uris)) {
@@ -65,7 +65,8 @@ private[scenario] class ExtractedUris(scenarioElements: Seq[ScenarioElement]) {
           tmpValues = Value(valName, uris.head.getHost) :: tmpValues
           extractCommonHostUrls(uris, valName)
         }
-    }
+      }
+      .to(Map)
 
     (tmpValues, tmpRenders)
   }
@@ -100,8 +101,8 @@ private[scenario] class ExtractedUris(scenarioElements: Seq[ScenarioElement]) {
     }
 
   private def extractCommonHostUrls(uris: List[Uri], valName: String): List[(String, String)] =
-    uris.map(
-      uri => (uri.toString, s""""${uri.getScheme}://${user(uri)}" + $valName + ${protectWithTripleQuotes(s"${port(uri)}${uri.getPath}${query(uri)}")}""")
+    uris.map(uri =>
+      (uri.toString, s""""${uri.getScheme}://${user(uri)}" + $valName + ${protectWithTripleQuotes(s"${port(uri)}${uri.getPath}${query(uri)}")}""")
     )
 
   private def schemesPortAreSame(uris: Seq[Uri]): Boolean =

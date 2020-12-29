@@ -16,6 +16,7 @@
 
 package io.gatling.http.protocol
 
+import java.{ util => ju }
 import java.net.InetAddress
 import java.util.regex.Pattern
 import javax.net.ssl.KeyManagerFactory
@@ -51,7 +52,7 @@ object HttpProtocol extends StrictLogging {
       val httpEngine = HttpEngine(coreComponents)
       coreComponents.actorSystem.registerOnTermination(httpEngine.close())
       val httpCaches = new HttpCaches(coreComponents)
-      val defaultStatsProcessor = new DefaultStatsProcessor(coreComponents.configuration.core.charset, coreComponents.statsEngine)
+      val defaultStatsProcessor = new DefaultStatsProcessor(coreComponents.statsEngine)
 
       httpProtocol => {
         val httpComponents = new HttpComponents(
@@ -103,14 +104,13 @@ object HttpProtocol extends StrictLogging {
       ),
       wsPart = HttpProtocolWsPart(
         wsBaseUrls = Nil,
-        reconnect = false,
-        maxReconnects = None
+        maxReconnects = 0
       ),
       proxyPart = HttpProtocolProxyPart(
         proxy = None,
         proxyExceptions = Nil
       ),
-      dnsPart = DnsPart(
+      dnsPart = HttpProtocolDnsPart(
         dnsNameResolution = JavaDnsNameResolution,
         hostNameAliases = Map.empty,
         perUserNameResolution = false
@@ -138,7 +138,7 @@ final case class HttpProtocol(
     responsePart: HttpProtocolResponsePart,
     wsPart: HttpProtocolWsPart,
     proxyPart: HttpProtocolProxyPart,
-    dnsPart: DnsPart
+    dnsPart: HttpProtocolDnsPart
 ) extends Protocol {
 
   type Components = HttpComponents
@@ -179,8 +179,7 @@ final case class HttpProtocolResponsePart(
 
 final case class HttpProtocolWsPart(
     wsBaseUrls: List[String],
-    reconnect: Boolean,
-    maxReconnects: Option[Int]
+    maxReconnects: Int
 )
 
 final case class HttpProtocolProxyPart(
@@ -188,8 +187,8 @@ final case class HttpProtocolProxyPart(
     proxyExceptions: Seq[String]
 )
 
-final case class DnsPart(
+final case class HttpProtocolDnsPart(
     dnsNameResolution: DnsNameResolution,
-    hostNameAliases: Map[String, Array[InetAddress]],
+    hostNameAliases: Map[String, ju.List[InetAddress]],
     perUserNameResolution: Boolean
 )

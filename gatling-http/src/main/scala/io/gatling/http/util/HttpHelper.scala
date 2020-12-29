@@ -20,9 +20,8 @@ import java.net.URLDecoder
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets.UTF_8
 
-import scala.collection.{ breakOut, BitSet }
-import scala.collection.JavaConverters._
-import scala.util.Try
+import scala.collection.BitSet
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import io.gatling.core.session._
@@ -39,21 +38,34 @@ private[gatling] object HttpHelper extends StrictLogging {
 
   val HttpScheme = "http"
   val WsScheme = "ws"
-  val OkCodes
-      : BitSet = BitSet.empty + OK.code + NOT_MODIFIED.code + CREATED.code + ACCEPTED.code + NON_AUTHORITATIVE_INFORMATION.code + NO_CONTENT.code + RESET_CONTENT.code + PARTIAL_CONTENT.code + MULTI_STATUS.code + 208 + 209
-  private val RedirectStatusCodes = BitSet.empty + MOVED_PERMANENTLY.code + FOUND.code + SEE_OTHER.code + TEMPORARY_REDIRECT.code + PERMANENT_REDIRECT.code
+  val OkCodes: BitSet = BitSet(
+    OK.code,
+    NOT_MODIFIED.code,
+    CREATED.code,
+    ACCEPTED.code,
+    NON_AUTHORITATIVE_INFORMATION.code,
+    NO_CONTENT.code,
+    RESET_CONTENT.code,
+    PARTIAL_CONTENT.code,
+    MULTI_STATUS.code,
+    208,
+    209
+  )
+  private val RedirectStatusCodes = BitSet(MOVED_PERMANENTLY.code, FOUND.code, SEE_OTHER.code, TEMPORARY_REDIRECT.code, PERMANENT_REDIRECT.code)
 
   def parseFormBody(body: String): List[(String, String)] = {
     def utf8Decode(s: String) = URLDecoder.decode(s, UTF_8.name)
 
     body
       .split("&")
+      .view
       .map(_.split("=", 2))
       .map { pair =>
         val paramName = utf8Decode(pair(0))
         val paramValue = if (pair.length > 1) utf8Decode(pair(1)) else ""
         paramName -> paramValue
-      }(breakOut)
+      }
+      .to(List)
   }
 
   def buildBasicAuthRealm(username: Expression[String], password: Expression[String]): Expression[Realm] =
@@ -70,55 +82,27 @@ private[gatling] object HttpHelper extends StrictLogging {
         passwordValue <- password(session)
       } yield new DigestRealm(usernameValue, passwordValue)
 
-  private def headerExists(headers: HttpHeaders, headerName: CharSequence, f: String => Boolean): Boolean = Option(headers.get(headerName)).exists(f)
-  def isCss(headers: HttpHeaders): Boolean = headerExists(headers, HttpHeaderNames.CONTENT_TYPE, _.startsWith(MissingNettyHttpHeaderValues.TextCss.toString))
-  def isHtml(headers: HttpHeaders): Boolean =
-    headerExists(
-      headers,
-      HttpHeaderNames.CONTENT_TYPE,
-      ct => ct.startsWith(MissingNettyHttpHeaderValues.TextHtml.toString) || ct.startsWith(MissingNettyHttpHeaderValues.ApplicationXhtml.toString)
-    )
-  def isAjax(headers: HttpHeaders): Boolean =
-    headerExists(headers, MissingNettyHttpHeaderNames.XRequestedWith, _ == MissingNettyHttpHeaderValues.XmlHttpRequest.toString)
+  private def mimeType(headers: HttpHeaders): Option[String] =
+    Option(headers.get(HttpHeaderNames.CONTENT_TYPE)).map { contentType =>
+      val comma = contentType.indexOf(';')
+      if (comma == -1) {
+        contentType
+      } else {
+        contentType.substring(0, comma).trim
+      }
+    }
 
-  private val ApplicationStart = "application/"
-  private val ApplicationStartOffset = ApplicationStart.length
-  private val ApplicationJavascriptEnd = "javascript"
-  private val ApplicationJsonEnd = "json"
-  private val ApplicationXmlEnd = "xml"
-  private val ApplicationFormUrlEncodedEnd = "x-www-form-urlencoded"
-  private val ApplicationXhtmlEnd = "xhtml+xml"
-  private val TextStart = "text/"
-  private val TextStartOffset = TextStart.length
-  private val TextCssEnd = "css"
-  private val TextCsvEnd = "csv"
-  private val TextHtmlEnd = "html"
-  private val TextJavascriptEnd = "javascript"
-  private val TextPlainEnd = "plain"
-  private val TextXmlEnd = "xml"
-
+  private val StandardApplicationTextMimeTypes = Set("javascript", "json", "xml", "x-www-form-urlencoded")
+  private val StandardApplicationTextExtensions = Set("+xml", "+json")
   def isText(headers: HttpHeaders): Boolean =
-    headerExists(
-      headers,
-      HttpHeaderNames.CONTENT_TYPE,
-      ct =>
-        ct.startsWith(ApplicationStart) && (
-          ct.startsWith(ApplicationJavascriptEnd, ApplicationStartOffset)
-            || ct.startsWith(ApplicationJsonEnd, ApplicationStartOffset)
-            || ct.startsWith(ApplicationXmlEnd, ApplicationStartOffset)
-            || ct.startsWith(ApplicationFormUrlEncodedEnd, ApplicationStartOffset)
-            || ct.startsWith(ApplicationXhtmlEnd, ApplicationStartOffset)
-        )
-          || (ct.startsWith(TextStart) && (
-            ct.startsWith(TextCssEnd, TextStartOffset)
-              || ct.startsWith(TextCsvEnd, TextStartOffset)
-              || ct.startsWith(TextHtmlEnd, TextStartOffset)
-              || ct.startsWith(TextJavascriptEnd, TextStartOffset)
-              || ct.startsWith(TextJavascriptEnd, TextStartOffset)
-              || ct.startsWith(TextPlainEnd, TextStartOffset)
-              || ct.startsWith(TextXmlEnd, TextStartOffset)
-          ))
-    )
+    mimeType(headers).exists {
+      case s"application/$app" => StandardApplicationTextMimeTypes.contains(app) || StandardApplicationTextExtensions.exists(app.endsWith)
+      case mt                  => mt.startsWith("text/")
+    }
+  def isCss(headers: HttpHeaders): Boolean = mimeType(headers).contains(MissingNettyHttpHeaderValues.TextCss.toString)
+  def isHtml(headers: HttpHeaders): Boolean =
+    mimeType(headers).exists(mt => mt == MissingNettyHttpHeaderValues.TextHtml.toString || mt == MissingNettyHttpHeaderValues.ApplicationXhtml.toString)
+  def isAjax(headers: HttpHeaders): Boolean = headers.contains(MissingNettyHttpHeaderNames.XRequestedWith, MissingNettyHttpHeaderValues.XmlHttpRequest, false)
 
   def resolveFromUri(rootURI: Uri, relative: String): Uri =
     if (relative.startsWith("//"))
@@ -131,7 +115,7 @@ private[gatling] object HttpHelper extends StrictLogging {
       Some(resolveFromUri(rootURI, relative))
     } catch {
       case NonFatal(e) =>
-        logger.info(s"Failed to resolve URI rootURI='$rootURI', relative='$relative'", e)
+        logger.debug(s"Failed to resolve URI rootURI='$rootURI', relative='$relative'", e)
         None
     }
 
@@ -185,7 +169,7 @@ private[gatling] object HttpHelper extends StrictLogging {
     if (setCookieValues.isEmpty) {
       Nil
     } else {
-      setCookieValues.asScala.flatMap(setCookie => Option(ClientCookieDecoder.LAX.decode(setCookie)).toList)(breakOut)
+      setCookieValues.asScala.view.flatMap(setCookie => Option(ClientCookieDecoder.LAX.decode(setCookie)).toList).to(List)
     }
   }
 }

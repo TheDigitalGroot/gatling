@@ -23,7 +23,7 @@ import java.util.Date
 import scala.collection.mutable
 import scala.math.{ ceil, floor }
 
-import io.gatling.commons.stats.ErrorStats
+import io.gatling.commons.shared.unstable.model.stats.ErrorStats
 import io.gatling.commons.util.Collections._
 import io.gatling.commons.util.StringHelper._
 import io.gatling.core.config.GatlingConfiguration
@@ -116,9 +116,8 @@ object ConsoleSummary {
 
         writeSubTitle(sb, "Errors").append(Eol)
 
-        errorsCounters.toSeq.sortBy(-_._2).foreach {
-          case (message, count) =>
-            ConsoleErrorsWriter.writeError(sb, new ErrorStats(message, count, errorsTotal)).append(Eol)
+        errorsCounters.toSeq.sortBy(-_._2).foreach { case (message, count) =>
+          ConsoleErrorsWriter.writeError(sb, new ErrorStats(message, count, errorsTotal)).append(Eol)
         }
       }
       sb
@@ -138,9 +137,8 @@ object ConsoleSummary {
     writeDetailedRequestsCounter(sb).append(Eol)
     writeErrors(sb).append(Eol)
 
-    usersCounters.foreach {
-      case (scenarioName, usersStats) =>
-        writeUsersCounters(sb, scenarioName, usersStats).append(Eol)
+    usersCounters.foreach { case (scenarioName, usersStats) =>
+      writeUsersCounters(sb, scenarioName, usersStats).append(Eol)
     }
 
     sb.append(NewBlock).append(Eol)

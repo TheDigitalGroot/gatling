@@ -44,7 +44,7 @@ If you want to load test several servers at the same time, to bypass a load-bala
 
 .. includecode:: code/HttpProtocolSample.scala#baseUrls
 
-The selection of the URL is made once and for all for a given virtual user.
+Each virtual user will pick one of the baseUrl from the list once and for all when it starts, based on a round-robin strategy.
 
 .. _http-protocol-warmup:
 
@@ -140,24 +140,20 @@ If you configure a remote in prior knowledge and set it to true, but that the AL
 DNS Name Resolution
 -------------------
 
-By default, Gatling uses Java's DNS name resolution, meaning that it uses a cache shared amongst all virtual users.
-More over, Java's cache doesn't honor DNS records TTL.
+By default, Gatling uses Java's DNS name resolution. This cache has a TTL of 30s by default on OpenJDK and doesn't honor the DNS records' own TTL.
 You can control the TTL with ``-Dsun.net.inetaddr.ttl=N`` where `N` is a number of seconds.
+Please note the ``sun.net.inetaddr.ttl`` System property is deprecated and one should use the ``networkaddress.cache.ttl`` Security property instead, see `doc <https://docs.oracle.com/javase/8/docs/technotes/guides/net/properties.html>`_.
 
-If you're using the JDK resolution and have multiple IP (multiple DNS records) for a given hostname, Gatling will automatically shuffle them
+If you're using the Java DNS name resolution and have multiple IP (multiple DNS records) for a given hostname, Gatling will automatically shuffle them
 to emulate DNS round-robin.
 
 You can use a Netty based DNS resolution instead, with ``.asyncNameResolution()``.
 This method can take a sequence of DNS server adresses, eg ``.asyncNameResolution("8.8.8.8")``.
-If you don't pass DNS servers, Gatling will use the one from your OS configuration on Linux and MacOS only,
+If you don't pass DNS servers, Gatling will use the ones from your OS configuration on Linux and MacOS only,
 and to Google's ones on Windows(don't run with heavy load as Google will block you).
 
 You can also make it so that every virtual user performs its own DNS name resolution with ``.perUserNameResolution``.
 This parameter is only effective when using ``asyncNameResolution``.
-
-Note this feature is experimental.
-This feature is pretty useful if you're dealing with an elastic cluster where new IPs are added to the DNS server under load,
-for example with AWS ALB and Route53.
 
 .. _http-protocol-hostname-aliasing:
 
@@ -189,6 +185,7 @@ You can bind the sockets from specific local addresses instead of the default on
   localAddress(localAddress: String)
   localAddresses(localAddress1: String, localAddress2: String)
   useAllLocalAddresses // automatically discover all bindable local addresses
+  useAllLocalAddressesMatching(regex1, regex2) // automatically discover all bindable local addresses matching one of the pattern parameters (String)
 
 When setting multiple addresses, each virtual user is assigned to one single local address once and for all.
 

@@ -44,13 +44,12 @@ public class RequestBuilder {
 
   private static final AsciiString ACCEPT_ALL_HEADER_VALUE = new AsciiString("*/*");
 
-  private final static InetAddressNameResolver DEFAULT_NAME_RESOLVER = InetAddressNameResolver.DEFAULT;
-
   private final HttpMethod method;
   private final Uri uri;
+  private final InetAddressNameResolver nameResolver;
   private HttpHeaders headers = new DefaultHttpHeaders(false);
   private List<Cookie> cookies;
-  private RequestBodyBuilder<?> bodyBuilder;
+  private RequestBodyBuilder bodyBuilder;
   private long requestTimeout;
   private String virtualHost;
   private InetAddress localIpV4Address;
@@ -58,21 +57,20 @@ public class RequestBuilder {
   private Realm realm;
   private ProxyServer proxyServer;
   private SignatureCalculator signatureCalculator;
-  private InetAddressNameResolver nameResolver = DEFAULT_NAME_RESOLVER;
   private boolean http2Enabled;
   private boolean alpnRequired;
   private boolean http2PriorKnowledge;
   private String wsSubprotocol;
   private Charset defaultCharset = UTF_8;
 
-  public RequestBuilder(HttpMethod method, Uri uri) {
+  public RequestBuilder(HttpMethod method, Uri uri, InetAddressNameResolver nameResolver) {
     this.method = method;
     this.uri = uri;
+    this.nameResolver = nameResolver;
   }
 
   public RequestBuilder(Request request, Uri uri) {
-    method = request.getMethod();
-    this.uri = uri;
+    this(request.getMethod(), uri, request.getNameResolver());
     headers = request.getHeaders();
     cookies = request.getCookies();
     bodyBuilder = request.getBody() != null ? request.getBody().newBuilder() : null;
@@ -83,7 +81,6 @@ public class RequestBuilder {
     realm = request.getRealm();
     proxyServer = request.getProxyServer();
     signatureCalculator = request.getSignatureCalculator();
-    nameResolver = request.getNameResolver();
     http2Enabled = request.isHttp2Enabled();
     alpnRequired = request.isAlpnRequired();
     http2PriorKnowledge = request.isHttp2PriorKnowledge();
@@ -109,7 +106,7 @@ public class RequestBuilder {
     return this;
   }
 
-  public RequestBuilder setBodyBuilder(RequestBodyBuilder<?> bodyBuilder) {
+  public RequestBuilder setBodyBuilder(RequestBodyBuilder bodyBuilder) {
     this.bodyBuilder = bodyBuilder;
     return this;
   }
@@ -146,11 +143,6 @@ public class RequestBuilder {
 
   public RequestBuilder setSignatureCalculator(SignatureCalculator signatureCalculator) {
     this.signatureCalculator = signatureCalculator;
-    return this;
-  }
-
-  public RequestBuilder setNameResolver(InetAddressNameResolver nameResolver) {
-    this.nameResolver = nameResolver;
     return this;
   }
 
@@ -203,18 +195,21 @@ public class RequestBuilder {
     }
 
     String referer = headers.get(REFERER);
-    if (!headers.contains(ORIGIN)
+    if (referer != null
       && !HttpMethod.GET.equals(method)
       && !HttpMethod.HEAD.equals(method)
-      && referer != null) {
-      headers.set(ORIGIN, originHeader(Uri.create(referer)));
+      && !headers.contains(ORIGIN)) {
+      String origin = originHeader(referer);
+      if (origin != null) {
+        headers.set(ORIGIN, origin);
+      }
     }
 
     if (!headers.contains(HOST)) {
       headers.set(HOST, virtualHost != null ? virtualHost : hostHeader(uri));
     }
 
-    RequestBody<?> body = null;
+    RequestBody body = null;
     if (bodyBuilder != null) {
       String contentType = headers.get(CONTENT_TYPE);
       Charset charset = extractContentTypeCharsetAttribute(contentType);

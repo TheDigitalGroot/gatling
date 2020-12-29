@@ -17,7 +17,10 @@
 package io.gatling.http.protocol
 
 import java.net.{ Inet4Address, InetAddress, InetSocketAddress }
+import java.util.regex.Pattern
 import javax.net.ssl.KeyManagerFactory
+
+import scala.jdk.CollectionConverters._
 
 import io.gatling.core.config.GatlingConfiguration
 import io.gatling.core.filter.{ BlackList, Filters, WhiteList }
@@ -53,7 +56,7 @@ final case class HttpProtocolBuilder(protocol: HttpProtocol, useOpenSsl: Boolean
   def disableWarmUp: HttpProtocolBuilder = this.modify(_.protocol.warmUpUrl).setTo(None)
 
   // enginePart
-  def shareConnections: HttpProtocolBuilder = this.modify(_.protocol.enginePart.shareConnections).setTo(true)
+  def shareConnections: HttpProtocolBuilder = disableAutoReferer.modify(_.protocol.enginePart.shareConnections).setTo(true)
   def virtualHost(virtualHost: Expression[String]): HttpProtocolBuilder = this.modify(_.protocol.enginePart.virtualHost).setTo(Some(virtualHost))
   def localAddress(address: String): HttpProtocolBuilder = localAddresses(address :: Nil)
   def localAddresses(addresses: String*): HttpProtocolBuilder = localAddresses(addresses.toList)
@@ -61,8 +64,18 @@ final case class HttpProtocolBuilder(protocol: HttpProtocol, useOpenSsl: Boolean
     val (ipV4Addresses, ipV6Addresses) = addresses.map(InetAddress.getByName).partition(_.isInstanceOf[Inet4Address])
     localAddresses(ipV4Addresses, ipV6Addresses)
   }
-  def useAllLocalAddresses: HttpProtocolBuilder =
-    localAddresses(InetAddresses.AllIpV4LocalAddresses, InetAddresses.AllIpV6LocalAddresses)
+  def useAllLocalAddresses: HttpProtocolBuilder = useAllLocalAddressesMatching()
+  def useAllLocalAddressesMatching(patterns: String*): HttpProtocolBuilder = {
+    val compiledPatterns = patterns.map(Pattern.compile)
+
+    def filter(addresses: List[InetAddress]): List[InetAddress] =
+      addresses.filter { address =>
+        val hostAddress = address.getHostAddress
+        compiledPatterns.exists(_.matcher(hostAddress).matches)
+      }
+
+    localAddresses(filter(InetAddresses.AllIpV4LocalAddresses), filter(InetAddresses.AllIpV6LocalAddresses))
+  }
 
   private def localAddresses(ipV4Addresses: List[InetAddress], ipV6Addresses: List[InetAddress]): HttpProtocolBuilder =
     this
@@ -89,7 +102,7 @@ final case class HttpProtocolBuilder(protocol: HttpProtocol, useOpenSsl: Boolean
   def disableCaching: HttpProtocolBuilder = this.modify(_.protocol.requestPart.cache).setTo(false)
   def header(name: CharSequence, value: Expression[String]): HttpProtocolBuilder = this.modify(_.protocol.requestPart.headers).using(_ + (name -> value))
   def headers(headers: Map[_ <: CharSequence, String]): HttpProtocolBuilder =
-    this.modify(_.protocol.requestPart.headers).using(_ ++ headers.mapValues(_.el[String]))
+    this.modify(_.protocol.requestPart.headers).using(_ ++ headers.view.mapValues(_.el[String]))
   def acceptHeader(value: Expression[String]): HttpProtocolBuilder = header(HttpHeaderNames.ACCEPT, value)
   def acceptCharsetHeader(value: Expression[String]): HttpProtocolBuilder = header(HttpHeaderNames.ACCEPT_CHARSET, value)
   def acceptEncodingHeader(value: Expression[String]): HttpProtocolBuilder = header(HttpHeaderNames.ACCEPT_ENCODING, value)
@@ -125,14 +138,13 @@ final case class HttpProtocolBuilder(protocol: HttpProtocol, useOpenSsl: Boolean
   def http2PriorKnowledge(remotes: Map[String, Boolean]): HttpProtocolBuilder =
     this
       .modify(_.protocol.enginePart.http2PriorKnowledge)
-      .setTo(remotes.map {
-        case (address, isHttp2) =>
-          val remote = address.split(':') match {
-            case Array(hostname, port) => new Remote(hostname, port.toInt)
-            case Array(hostname)       => new Remote(hostname, 443)
-            case _                     => throw new IllegalArgumentException("Invalid address for HTTP/2 prior knowledge: " + address)
-          }
-          remote -> isHttp2
+      .setTo(remotes.map { case (address, isHttp2) =>
+        val remote = address.split(':') match {
+          case Array(hostname, port) => new Remote(hostname, port.toInt)
+          case Array(hostname)       => new Remote(hostname, 443)
+          case _                     => throw new IllegalArgumentException("Invalid address for HTTP/2 prior knowledge: " + address)
+        }
+        remote -> isHttp2
       })
 
   // responsePart
@@ -165,8 +177,8 @@ final case class HttpProtocolBuilder(protocol: HttpProtocol, useOpenSsl: Boolean
   def wsBaseUrl(url: String): HttpProtocolBuilder = wsBaseUrls(List(url))
   def wsBaseUrls(urls: String*): HttpProtocolBuilder = wsBaseUrls(urls.toList)
   def wsBaseUrls(urls: List[String]): HttpProtocolBuilder = this.modify(_.protocol.wsPart.wsBaseUrls).setTo(urls)
-  def wsReconnect: HttpProtocolBuilder = this.modify(_.protocol.wsPart.reconnect).setTo(true)
-  def wsMaxReconnects(max: Int): HttpProtocolBuilder = this.modify(_.protocol.wsPart.maxReconnects).setTo(Some(max))
+  def wsReconnect: HttpProtocolBuilder = wsMaxReconnects(Int.MaxValue)
+  def wsMaxReconnects(max: Int): HttpProtocolBuilder = this.modify(_.protocol.wsPart.maxReconnects).setTo(max)
 
   // proxyPart
   def noProxyFor(hosts: String*): HttpProtocolBuilder = this.modify(_.protocol.proxyPart.proxyExceptions).setTo(hosts)
@@ -184,8 +196,8 @@ final case class HttpProtocolBuilder(protocol: HttpProtocol, useOpenSsl: Boolean
   def asyncNameResolution(dnsServers: Array[InetSocketAddress]): HttpProtocolBuilder =
     this.modify(_.protocol.dnsPart.dnsNameResolution).setTo(AsyncDnsNameResolution(dnsServers))
   def hostNameAliases(aliases: Map[String, List[String]]): HttpProtocolBuilder = {
-    val aliasesToInetAddresses = aliases.map {
-      case (hostname, ips) => hostname -> ips.map(ip => InetAddress.getByAddress(hostname, InetAddress.getByName(ip).getAddress)).toArray
+    val aliasesToInetAddresses = aliases.map { case (hostname, ips) =>
+      hostname -> ips.map(ip => InetAddress.getByAddress(hostname, InetAddress.getByName(ip).getAddress)).asJava
     }
     this.modify(_.protocol.dnsPart.hostNameAliases).setTo(aliasesToInetAddresses)
   }

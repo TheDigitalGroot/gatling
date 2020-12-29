@@ -18,10 +18,10 @@ package io.gatling.core.test
 
 import java.util.concurrent.ConcurrentLinkedDeque
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import io.gatling.BaseSpec
 import io.gatling.commons.util.DefaultClock
@@ -46,18 +46,17 @@ trait ScenarioTestFixture extends BaseSpec {
 
   private def resolve(msgQueue: ConcurrentLinkedDeque[Any], expectations: ArrayBuffer[PartialFunction[Any, Unit]]): Unit = {
     val msgIt = msgQueue.iterator
-    expectations.zipWithIndex.foreach {
-      case (expectation, i) =>
-        if (!msgIt.hasNext) {
-          throw new AssertionError(s"Expectation $i didn't receive any message")
-        }
-        val msg = msgIt.next()
+    expectations.zipWithIndex.foreach { case (expectation, i) =>
+      if (!msgIt.hasNext) {
+        throw new AssertionError(s"Expectation $i didn't receive any message")
+      }
+      val msg = msgIt.next()
 
-        if (!expectation.isDefinedAt(msg)) {
-          throw new AssertionError(s"Expectation $i didn't match message $msg")
-        }
+      if (!expectation.isDefinedAt(msg)) {
+        throw new AssertionError(s"Expectation $i didn't match message $msg")
+      }
 
-        expectation(msg)
+      expectation(msg)
     }
 
     if (msgIt.hasNext) {
@@ -78,11 +77,11 @@ trait ScenarioTestFixture extends BaseSpec {
       val ctx = ScenarioTestContext(scenarioContext, statsEngine, exitAction)
 
       f(ctx)
-      exitAction.await(2 seconds)
+      exitAction.await(2.seconds)
       resolve(statsEngine.msgQueue, ctx.expectations)
 
     } finally {
-      Await.ready(system.terminate(), 2 seconds)
+      Await.ready(system.terminate(), 2.seconds)
     }
   }
 

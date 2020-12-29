@@ -16,12 +16,11 @@
 
 package io.gatling.charts.report
 
-import scala.collection.breakOut
-
 import io.gatling.charts.component.{ ComponentLibrary, GroupedCount, RequestStatistics, Statistics }
 import io.gatling.charts.config.ChartsFiles
 import io.gatling.charts.stats.RequestPath
 import io.gatling.charts.template.{ ConsoleTemplate, GlobalStatsJsonTemplate, StatsJsTemplate }
+import io.gatling.commons.shared.unstable.model.stats.{ GeneralStats, Group, GroupStatsPath, RequestStatsPath }
 import io.gatling.commons.stats._
 import io.gatling.commons.util.NumberHelper._
 import io.gatling.core.config.GatlingConfiguration
@@ -61,8 +60,8 @@ private[charts] class StatsReportGenerator(reportsGenerationInputs: ReportsGener
 
       val groupedCounts = logFileReader
         .numberOfRequestInResponseTimeRange(requestName, group)
-        .map {
-          case (rangeName, count) => GroupedCount(rangeName, count, total.count)
+        .map { case (rangeName, count) =>
+          GroupedCount(rangeName, count, total.count)
         }
 
       val path = requestName match {
@@ -117,8 +116,8 @@ private[charts] class StatsReportGenerator(reportsGenerationInputs: ReportsGener
 
       val groupedCounts = logFileReader
         .numberOfRequestInResponseTimeRange(None, Some(group))
-        .map {
-          case (rangeName, count) => GroupedCount(rangeName, count, total.count)
+        .map { case (rangeName, count) =>
+          GroupedCount(rangeName, count, total.count)
         }
 
       val path = RequestPath.path(group)
@@ -149,7 +148,8 @@ private[charts] class StatsReportGenerator(reportsGenerationInputs: ReportsGener
         case GroupStatsPath(group)            => group
         case RequestStatsPath(_, Some(group)) => group
       }
-      .map(group => group.hierarchy.reverse -> group)(breakOut)
+      .map(group => group.hierarchy.reverse -> group)
+      .toMap
 
     val seenGroups = collection.mutable.HashSet.empty[List[String]]
 
@@ -171,13 +171,12 @@ private[charts] class StatsReportGenerator(reportsGenerationInputs: ReportsGener
     }
 
     val requestStatsPaths = statsPaths.collect { case path: RequestStatsPath => path }
-    requestStatsPaths.foreach {
-      case RequestStatsPath(request, group) =>
-        group.foreach { group =>
-          addGroupsRec(group.hierarchy.reverse)
-        }
-        val stats = computeRequestStats(request, Some(request), group)
-        rootContainer.addRequest(group, request, stats)
+    requestStatsPaths.foreach { case RequestStatsPath(request, group) =>
+      group.foreach { group =>
+        addGroupsRec(group.hierarchy.reverse)
+      }
+      val stats = computeRequestStats(request, Some(request), group)
+      rootContainer.addRequest(group, request, stats)
     }
 
     new TemplateWriter(chartsFiles.statsJsFile).writeToFile(new StatsJsTemplate(rootContainer, false).getOutput(configuration.core.charset))

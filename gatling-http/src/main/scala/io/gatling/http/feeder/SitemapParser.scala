@@ -19,9 +19,9 @@ package io.gatling.http.feeder
 import java.io.InputStream
 import java.nio.charset.Charset
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
+import scala.util.Using
 
-import io.gatling.commons.util.Io._
 import io.gatling.core.check.xpath.XmlParsers
 import io.gatling.core.feeder.Record
 import io.gatling.core.util.Resource
@@ -43,7 +43,7 @@ object SitemapParser {
    * @return a record for each url described in a sitemap file
    */
   def parse(resource: Resource, charset: Charset): IndexedSeq[Record[String]] =
-    withCloseable(resource.inputStream) { stream: InputStream =>
+    Using.resource(resource.inputStream) { stream: InputStream =>
       parse(stream, charset)
     }
 

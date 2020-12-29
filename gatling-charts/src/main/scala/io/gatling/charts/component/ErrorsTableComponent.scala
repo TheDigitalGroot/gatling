@@ -17,7 +17,7 @@
 package io.gatling.charts.component
 
 import io.gatling.charts.util.HtmlHelper.HtmlRichString
-import io.gatling.commons.stats.ErrorStats
+import io.gatling.commons.shared.unstable.model.stats.ErrorStats
 import io.gatling.commons.util.NumberHelper._
 
 private[charts] class ErrorsTableComponent(errors: Seq[ErrorStats]) extends Component {
@@ -43,8 +43,8 @@ private[charts] class ErrorsTableComponent(errors: Seq[ErrorStats]) extends Comp
             </tr>
         </thead>
 		<tbody>
-		    ${errors.zipWithIndex.map {
-        case (error, index) => s"""
+		    ${errors.zipWithIndex.map { case (error, index) =>
+        s"""
 		    <tr>
 		    	<td class="error-col-1 total">${error.message.htmlEscape}<span class="value" style="display:none">$index</span></td>
 		    	<td class="value error-col-2 total">${error.count}</td>

@@ -35,6 +35,8 @@ sealed trait OpenInjectionStep extends Product with Serializable {
    * Number of users to inject
    */
   private[inject] def users: Long
+
+  private[inject] def duration: FiniteDuration
 }
 
 abstract class InjectionIterator(durationInSeconds: Int) extends AbstractIterator[FiniteDuration] {
@@ -62,12 +64,11 @@ abstract class InjectionIterator(durationInSeconds: Int) extends AbstractIterato
           thisSecondIterator = Shard
             .shards(users, 1000)
             .zipWithIndex
-            .flatMap {
-              case (millisUsers, millis) =>
-                if (millisUsers > 0)
-                  Iterator.fill(millisUsers.toInt)((thisSecond * 1000 + millis) milliseconds)
-                else
-                  Iterator.empty
+            .flatMap { case (millisUsers, millis) =>
+              if (millisUsers > 0)
+                Iterator.fill(millisUsers.toInt)((thisSecond * 1000 + millis).milliseconds)
+              else
+                Iterator.empty
             }
           result = Some(false)
         }
@@ -76,7 +77,7 @@ abstract class InjectionIterator(durationInSeconds: Int) extends AbstractIterato
     result.getOrElse(true)
   }
 
-  override def hasNext(): Boolean =
+  override def hasNext: Boolean =
     if (thisSecondIterator.hasNext) {
       true
     } else if (finished) {
@@ -177,6 +178,8 @@ final case class AtOnceOpenInjection private[inject] (users: Long) extends OpenI
         }
       } ++ chained
     }
+
+  override private[inject] def duration: FiniteDuration = Duration.Zero
 }
 
 /**
@@ -369,13 +372,14 @@ final case class IncreasingUsersPerSecCompositeStep private[inject] (
     composite.users
 }
 
-private[inject] final case class CompositeOpenInjectionStep private[inject] (injectionSteps: List[OpenInjectionStep]) extends OpenInjectionStep {
+private[inject] final case class CompositeOpenInjectionStep private[inject] (steps: List[OpenInjectionStep]) extends OpenInjectionStep {
 
   override private[inject] def chain(iterator: Iterator[FiniteDuration]): Iterator[FiniteDuration] =
-    injectionSteps.foldRight(iterator) {
-      case (injectionStep, acc) =>
-        injectionStep.chain(acc)
+    steps.foldRight(iterator) { case (injectionStep, acc) =>
+      injectionStep.chain(acc)
     }
 
-  override private[inject] def users: Long = injectionSteps.map(_.users).sum
+  override private[inject] def users: Long = steps.map(_.users).sum
+
+  override private[inject] def duration: FiniteDuration = steps.foldLeft(Duration.Zero)((acc, step) => acc.plus(step.duration))
 }

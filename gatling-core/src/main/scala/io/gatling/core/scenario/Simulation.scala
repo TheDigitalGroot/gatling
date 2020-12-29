@@ -38,7 +38,6 @@ abstract class Simulation {
   private var _beforeSteps: List[() => Unit] = Nil
   private var _afterSteps: List[() => Unit] = Nil
 
-  @deprecated("Use sequential scenarios instead. Will be removed in 3.5.0", "3.4.0")
   def before(step: => Unit): Unit =
     _beforeSteps = _beforeSteps ::: List(() => step)
 
@@ -51,7 +50,6 @@ abstract class Simulation {
     new SetUp
   }
 
-  @deprecated("Use sequential scenarios instead. Will be removed in 3.5.0", "3.4.0")
   def after(step: => Unit): Unit =
     _afterSteps = _afterSteps ::: List(() => step)
 
@@ -101,7 +99,7 @@ abstract class Simulation {
     require(rootPopulationBuilders.nonEmpty, "No scenario set up")
 
     val childrenPopulationBuilders = PopulationBuilder.groupChildrenByParent(rootPopulationBuilders)
-    val allPopulationBuilders = childrenPopulationBuilders.values.flatten
+    val allPopulationBuilders = rootPopulationBuilders ++ childrenPopulationBuilders.values.flatten
 
     val duplicates =
       allPopulationBuilders
@@ -109,15 +107,18 @@ abstract class Simulation {
         .collect { case (name, scns) if scns.size > 1 => name }
     require(duplicates.isEmpty, s"Scenario names must be unique but found duplicates: $duplicates")
 
-    allPopulationBuilders.foreach(scn => require(scn.scenarioBuilder.actionBuilders.nonEmpty, s"Scenario ${scn.scenarioBuilder.name} is empty"))
+    allPopulationBuilders.foreach { scn =>
+      require(scn.scenarioBuilder.name.nonEmpty, "Scenario name cannot be empty")
+      require(scn.scenarioBuilder.actionBuilders.nonEmpty, s"Scenario ${scn.scenarioBuilder.name} is empty")
+    }
 
-    val scenarioThrottlings: Map[String, Throttling] = allPopulationBuilders.flatMap { scn =>
-      val steps = scn.scenarioThrottleSteps
+    val scenarioThrottlings: Map[String, Throttling] = allPopulationBuilders.flatMap { populationBuilder =>
+      val steps = populationBuilder.scenarioThrottleSteps
 
       if (steps.isEmpty) {
         Nil
       } else {
-        List(scn.scenarioBuilder.name -> Throttling(steps))
+        List(populationBuilder.scenarioBuilder.name -> Throttling(steps))
       }
     }.toMap
 
@@ -171,7 +172,7 @@ final class SimulationParams(
   def scenarios(coreComponents: CoreComponents): Scenarios = {
     val protocolComponentsRegistries = new ProtocolComponentsRegistries(coreComponents, globalProtocols)
     val rootScenarios = rootPopulationBuilders.map(buildScenario(_, coreComponents, protocolComponentsRegistries))
-    val childrenScenarios = childrenPopulationBuilders.mapValues(_.map(buildScenario(_, coreComponents, protocolComponentsRegistries)))
+    val childrenScenarios = childrenPopulationBuilders.view.mapValues(_.map(buildScenario(_, coreComponents, protocolComponentsRegistries))).toMap
 
     new Scenarios(rootScenarios, childrenScenarios)
   }

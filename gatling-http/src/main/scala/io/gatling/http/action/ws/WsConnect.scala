@@ -54,9 +54,9 @@ class WsConnect(
           connectRequest <- request(session)
           resolvedCheckSequences <- WsFrameCheckSequenceBuilder.resolve(connectCheckSequences, session)
         } yield {
-          logger.info(s"Opening websocket '$wsName': Scenario '${session.scenario}', UserId #${session.userId}")
+          logger.debug(s"Opening websocket '$wsName': Scenario '${session.scenario}', UserId #${session.userId}")
 
-          val wsFsm = new WsFsm(
+          val fsm = new WsFsm(
             wsName,
             connectRequest,
             requestName,
@@ -69,7 +69,7 @@ class WsConnect(
             clock
           )
 
-          wsFsm.onPerformInitialConnect(session, next)
+          fsm.onPerformInitialConnect(session.set(wsName, fsm), next)
         }
 
       case _ =>

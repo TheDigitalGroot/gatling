@@ -18,7 +18,7 @@ package io.gatling.compiler.config
 
 import java.nio.file._
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.gatling.compiler.config.ConfigUtils._
 import io.gatling.compiler.config.cli.{ ArgsParser, CommandLineOverrides }
@@ -38,7 +38,7 @@ private[compiler] object CompilerConfiguration {
   private val simulationsDirectoryKey = "gatling.core.directory.simulations"
   private val binariesDirectoryKey = "gatling.core.directory.binaries"
 
-  def configuration(args: Array[String]) = {
+  def configuration(args: Array[String]): CompilerConfiguration = {
     def buildConfigurationMap(overrides: CommandLineOverrides): Map[String, _ <: Any] = {
       val mapForSimulationFolder =
         string2option(overrides.simulationsDirectory)

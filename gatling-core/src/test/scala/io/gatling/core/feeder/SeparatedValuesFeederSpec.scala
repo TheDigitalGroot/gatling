@@ -17,13 +17,15 @@
 package io.gatling.core.feeder
 
 import java.io.{ ByteArrayInputStream, ByteArrayOutputStream }
+import java.nio.channels.{ Channels, ReadableByteChannel }
 import java.nio.charset.StandardCharsets.UTF_8
 
+import scala.util.Using
+
 import io.gatling.BaseSpec
-import io.gatling.commons.util.Io
 import io.gatling.core.config.GatlingConfiguration
 import io.gatling.core.feeder.SeparatedValuesParser._
-import io.gatling.core.feeder.Utf8BomSkipInputStream._
+import io.gatling.core.feeder.Utf8BomSkipReadableByteChannel._
 
 class SeparatedValuesFeederSpec extends BaseSpec with FeederSupport {
 
@@ -64,20 +66,23 @@ class SeparatedValuesFeederSpec extends BaseSpec with FeederSupport {
     data shouldBe Array(Map("foo" -> "hello", "bar" -> "world"))
   }
 
+  private def newChannel(bytes: Array[Byte]): ReadableByteChannel =
+    Channels.newChannel(new ByteArrayInputStream(bytes))
+
   "SeparatedValuesParser.stream" should "throw an exception when provided with bad resource" in {
     an[Exception] should be thrownBy
-      stream(CommaSeparator, quoteChar = '\'', configuration.core.charset)(getClass.getClassLoader.getResourceAsStream("empty.csv"))
+      stream(CommaSeparator, quoteChar = '\'', configuration.core.charset)(newChannel(Array.emptyByteArray))
   }
 
   it should "skip UTF-8 BOM" in {
     val bytes =
-      Io.withCloseable(new ByteArrayOutputStream) { os =>
+      Using.resource(new ByteArrayOutputStream) { os =>
         os.write(Array(Utf8BomByte1, Utf8BomByte2, Utf8BomByte3))
         os.write("foo,bar\n".getBytes(UTF_8))
         os.write("hello,world\n".getBytes(UTF_8))
         os.toByteArray
       }
-    stream(CommaSeparator, quoteChar = '\'', UTF_8)(new ByteArrayInputStream(bytes)).toVector shouldBe Vector(Map("foo" -> "hello", "bar" -> "world"))
+    stream(CommaSeparator, quoteChar = '\'', UTF_8)(newChannel(bytes)).toVector shouldBe Vector(Map("foo" -> "hello", "bar" -> "world"))
   }
 
   it should "skip empty lines" in {
@@ -89,7 +94,7 @@ class SeparatedValuesFeederSpec extends BaseSpec with FeederSupport {
          |
          |""".stripMargin.getBytes(UTF_8)
 
-    stream(CommaSeparator, quoteChar = '\'', UTF_8)(new ByteArrayInputStream(bytes)).toVector shouldBe Vector(
+    stream(CommaSeparator, quoteChar = '\'', UTF_8)(newChannel(bytes)).toVector shouldBe Vector(
       Map("header" -> "line1"),
       Map("header" -> "line2")
     )

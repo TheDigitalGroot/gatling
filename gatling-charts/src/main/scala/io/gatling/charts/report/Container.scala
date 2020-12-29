@@ -20,7 +20,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import io.gatling.charts.component.RequestStatistics
-import io.gatling.commons.stats.Group
+import io.gatling.commons.shared.unstable.model.stats.Group
 
 private[gatling] object Container {
   val Group = "GROUP"
@@ -32,7 +32,7 @@ private[charts] trait Container
 private[charts] final class RequestContainer(val name: String, val stats: RequestStatistics) extends Container
 
 private[charts] object GroupContainer {
-  def root(requestStats: RequestStatistics) = GroupContainer("ROOT", requestStats)
+  def root(requestStats: RequestStatistics): GroupContainer = GroupContainer("ROOT", requestStats)
 
   def apply(name: String, stats: RequestStatistics): GroupContainer =
     new GroupContainer(name, stats, mutable.LinkedHashMap.empty, mutable.LinkedHashMap.empty)

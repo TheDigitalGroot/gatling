@@ -53,8 +53,8 @@ class JmsCompileTest extends Simulation {
     .matchByMessageId
 
   private val scn = scenario("scn")
-  // requestReply
-  // textMessage
+    // requestReply
+    // textMessage
     .exec(
       jms("req").requestReply
         .queue("queue")
@@ -112,11 +112,13 @@ class JmsCompileTest extends Simulation {
         .check(jsonPath("$.foo"))
         .check(jmesPath("[].foo"))
         .check(substring("foo"))
+        .check(bodyLength.lte(50))
+        .check(bodyBytes.transform(_.length).lte(50))
         .check(bodyString)
         .check(
           bodyString.is("hello"),
           substring("he").count.is(1),
-          checkIf(bodyString.notNull.displayActualValue) {
+          checkIf(_ => true) {
             jsonPath("$").is("hello")
           }
         )
@@ -180,7 +182,7 @@ class JmsCompileTest extends Simulation {
         .jmsType("foo")
     )
 
-  setUp(scn.inject(rampUsersPerSec(10) to 1000 during (2 minutes)))
+  setUp(scn.inject(rampUsersPerSec(10) to 1000 during (2.minutes)))
     .protocols(jmsProtocolWithNativeConnectionFactory)
 
   private def checkBodyTextCorrect = simpleCheck {

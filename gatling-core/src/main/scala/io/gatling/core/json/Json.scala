@@ -19,10 +19,9 @@ package io.gatling.core.json
 import java.{ lang => jl, util => ju }
 
 import scala.annotation.switch
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.gatling.commons.util.Hex
-import io.gatling.commons.util.Maps._
 import io.gatling.commons.util.Spire._
 import io.gatling.netty.util.StringBuilderPool
 
@@ -135,8 +134,9 @@ private[gatling] object Json {
       case map: collection.Map[_, _] => appendMap(map)
       case jMap: ju.Map[_, _]        => appendMap(jMap.asScala)
       case array: Array[_]           => appendArray(array)
-      case seq: Seq[_]               => appendArray(seq)
+      case seq: Iterable[_]          => appendArray(seq)
       case coll: ju.Collection[_]    => appendArray(coll.asScala)
+      case product: Product          => appendProduct(product)
       case _                         => appendString(value.toString, rootLevel)
     }
 
@@ -176,7 +176,7 @@ private[gatling] object Json {
       sb
     }
 
-    def appendArray(iterable: Traversable[_]): jl.StringBuilder = {
+    def appendArray(iterable: Iterable[_]): jl.StringBuilder = {
       sb.append('[')
       iterable.foreach { elem =>
         appendStringified(elem, rootLevel = false).append(',')
@@ -189,13 +189,24 @@ private[gatling] object Json {
 
     def appendMap(map: collection.Map[_, _]): jl.StringBuilder = {
       sb.append('{')
-      map.foreach {
-        case (k, v) =>
-          sb.append('"').append(k).append("\":")
-          appendStringified(v, rootLevel = false).append(',')
+      map.foreach { case (k, v) =>
+        sb.append('"').append(k).append("\":")
+        appendStringified(v, rootLevel = false).append(',')
       }
       if (map.nonEmpty) {
         sb.setLength(sb.length - 1)
+      }
+      sb.append('}')
+    }
+
+    def appendProduct(product: Product): jl.StringBuilder = {
+      sb.append('{')
+      cfor(0)(_ < product.productArity, _ + 1) { i =>
+        if (i > 0) {
+          sb.append(',')
+        }
+        sb.append('"').append(product.productElementName(i)).append("\":")
+        appendStringified(product.productElement(i), rootLevel = false)
       }
       sb.append('}')
     }
@@ -279,7 +290,7 @@ private[gatling] object Json {
               asScala(entry3.getValue)
             )
           case _ =>
-            node.fields.asScala.map(e => e.getKey -> e.getValue).toMap.forceMapValues(asScala)
+            node.fields.asScala.map(e => e.getKey -> asScala(e.getValue)).toMap
         }
 
       case STRING  => node.textValue

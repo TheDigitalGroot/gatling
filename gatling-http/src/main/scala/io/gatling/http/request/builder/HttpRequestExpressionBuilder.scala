@@ -16,7 +16,7 @@
 
 package io.gatling.http.request.builder
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.gatling.commons.validation._
 import io.gatling.core.body._
@@ -40,6 +40,7 @@ object HttpRequestExpressionBuilder {
 
   private val bodyPartsToMultipartsZero = List.empty[Part[_]].success
 
+  @SuppressWarnings(Array("org.wartremover.warts.ListAppend"))
   private def bodyPartsToMultiparts(bodyParts: List[BodyPart], session: Session): Validation[List[Part[_]]] =
     bodyParts.foldLeft(bodyPartsToMultipartsZero) { (acc, bodyPart) =>
       for {
@@ -70,18 +71,16 @@ class HttpRequestExpressionBuilder(
     body match {
       case StringBody(string, _) => string(session).map(s => requestBuilder.setBodyBuilder(new StringRequestBodyBuilder(s)))
       case RawFileBody(resourceWithCachedBytes) =>
-        resourceWithCachedBytes(session).map {
-          case ResourceAndCachedBytes(resource, cachedBytes) =>
-            val requestBodyBuilder = cachedBytes match {
-              case Some(bytes) => new ByteArrayRequestBodyBuilder(bytes, resource.name)
-              case _           => new FileRequestBodyBuilder(resource.file)
-            }
-            requestBuilder.setBodyBuilder(requestBodyBuilder)
+        resourceWithCachedBytes(session).map { case ResourceAndCachedBytes(resource, cachedBytes) =>
+          val requestBodyBuilder = cachedBytes match {
+            case Some(bytes) => new ByteArrayRequestBodyBuilder(bytes, resource.name)
+            case _           => new FileRequestBodyBuilder(resource.file)
+          }
+          requestBuilder.setBodyBuilder(requestBodyBuilder)
         }
       case ByteArrayBody(bytes) => bytes(session).map(b => requestBuilder.setBodyBuilder(new ByteArrayRequestBodyBuilder(b, null)))
       case body: ElBody         => body.asStringWithCachedBytes(session).map(chunks => requestBuilder.setBodyBuilder(new StringChunksRequestBodyBuilder(chunks.asJava)))
       case InputStreamBody(is)  => is(session).map(is => requestBuilder.setBodyBuilder(new InputStreamRequestBodyBuilder(is)))
-      case body: PebbleBody     => body.apply(session).map(s => requestBuilder.setBodyBuilder(new StringRequestBodyBuilder(s)))
     }
 
   private val configureBody: RequestBuilderConfigure = {
@@ -117,17 +116,19 @@ class HttpRequestExpressionBuilder(
     }
   }
 
-  override protected def configureRequestBuilder(session: Session, requestBuilder: ClientRequestBuilder): Validation[ClientRequestBuilder] =
-    super
-      .configureRequestBuilder(session, requestBuilder)
-      .flatMap(configureBody(session))
-      .flatMap(configurePriorKnowledge(session))
+  override protected def configureRequestTimeout(requestBuilder: ClientRequestBuilder): Unit =
+    requestBuilder.setRequestTimeout(httpAttributes.requestTimeout.getOrElse(configuration.http.requestTimeout).toMillis)
+
+  override protected def configureRequestBuilderForProtocol: RequestBuilderConfigure =
+    session =>
+      requestBuilder =>
+        configureBody(session)(requestBuilder)
+          .flatMap(configurePriorKnowledge(session))
 
   private def configureCachingHeaders(session: Session)(request: Request): Request = {
-    httpCaches.contentCacheEntry(session, request).foreach {
-      case ContentCacheEntry(_, etag, lastModified) =>
-        etag.foreach(request.getHeaders.set(HttpHeaderNames.IF_NONE_MATCH, _))
-        lastModified.foreach(request.getHeaders.set(HttpHeaderNames.IF_MODIFIED_SINCE, _))
+    httpCaches.contentCacheEntry(session, request).foreach { case ContentCacheEntry(_, etag, lastModified) =>
+      etag.foreach(request.getHeaders.set(HttpHeaderNames.IF_NONE_MATCH, _))
+      lastModified.foreach(request.getHeaders.set(HttpHeaderNames.IF_MODIFIED_SINCE, _))
     }
     request
   }

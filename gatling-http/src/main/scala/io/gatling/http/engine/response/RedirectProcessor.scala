@@ -18,9 +18,8 @@ package io.gatling.http.engine.response
 
 import java.nio.charset.Charset
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import io.gatling.commons.validation._
 import io.gatling.core.session.Session
 import io.gatling.http.client.{ Request, RequestBuilder }
 import io.gatling.http.client.uri.Uri
@@ -41,19 +40,19 @@ object RedirectProcessor {
       httpProtocol: HttpProtocol,
       redirectUri: Uri,
       defaultCharset: Charset
-  ): Validation[Request] = {
-
+  ): Request = {
     val originalMethod = originalRequest.getMethod
 
-    val switchToGet = originalMethod != GET && (responseStatus == HttpResponseStatus.MOVED_PERMANENTLY || responseStatus == SEE_OTHER || (responseStatus == FOUND && !httpProtocol.responsePart.strict302Handling))
-    val keepBody = responseStatus == TEMPORARY_REDIRECT || responseStatus == PERMANENT_REDIRECT || (responseStatus == FOUND && httpProtocol.responsePart.strict302Handling)
+    val switchToGet =
+      originalMethod != GET && originalMethod != HEAD && originalMethod != OPTIONS && (responseStatus == HttpResponseStatus.MOVED_PERMANENTLY || responseStatus == SEE_OTHER || (responseStatus == FOUND && !httpProtocol.responsePart.strict302Handling))
+    val keepBody =
+      responseStatus == TEMPORARY_REDIRECT || responseStatus == PERMANENT_REDIRECT || (responseStatus == FOUND && httpProtocol.responsePart.strict302Handling)
 
     val newHeaders = originalRequest.getHeaders
       .remove(HttpHeaderNames.HOST)
       .remove(HttpHeaderNames.CONTENT_LENGTH)
       .remove(HttpHeaderNames.COOKIE)
       .remove(HttpHeaderNames.ORIGIN)
-      .set(HttpHeaderNames.REFERER, originalRequest.getUri.toString)
 
     if (originalRequest.getRealm != null) {
       // remove Authorization header if there's a realm as it will be recomputed
@@ -64,12 +63,11 @@ object RedirectProcessor {
       newHeaders.remove(HttpHeaderNames.CONTENT_TYPE)
     }
 
-    val requestBuilder = new RequestBuilder(if (switchToGet) GET else originalMethod, redirectUri)
+    val requestBuilder = new RequestBuilder(if (switchToGet) GET else originalMethod, redirectUri, originalRequest.getNameResolver)
       .setHeaders(newHeaders)
       .setHttp2Enabled(originalRequest.isHttp2Enabled)
       .setLocalIpV4Address(originalRequest.getLocalIpV4Address)
       .setLocalIpV6Address(originalRequest.getLocalIpV6Address)
-      .setNameResolver(originalRequest.getNameResolver)
       .setRealm(originalRequest.getRealm)
       .setRequestTimeout(originalRequest.getRequestTimeout)
       .setDefaultCharset(defaultCharset)
@@ -94,17 +92,6 @@ object RedirectProcessor {
       requestBuilder.setCookies(cookies.asJava)
     }
 
-    val newClientRequest = requestBuilder.build
-
-    if (newClientRequest.getUri == originalRequest.getUri
-        && newClientRequest.getMethod == originalRequest.getMethod
-        && newClientRequest.getCookies.asScala.toSet == originalRequest.getCookies.asScala.toSet) {
-      // invalid redirect
-
-      "Invalid redirect to the same request".failure
-
-    } else {
-      newClientRequest.success
-    }
+    requestBuilder.build
   }
 }

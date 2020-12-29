@@ -29,6 +29,7 @@ import io.gatling.http.client.{ Request, WebSocket }
 import io.gatling.http.engine.HttpEngine
 import io.gatling.http.protocol.HttpProtocol
 
+import com.typesafe.scalalogging.StrictLogging
 import io.netty.channel.EventLoop
 import io.netty.handler.codec.http.cookie.Cookie
 
@@ -43,20 +44,32 @@ class WsFsm(
     private[fsm] val httpProtocol: HttpProtocol,
     eventLoop: EventLoop,
     private[fsm] val clock: Clock
-) {
+) extends StrictLogging {
 
   private var currentState: WsState = new WsInitState(this)
   private var currentTimeout: ScheduledFuture[Unit] = _
-  private[fsm] def scheduleTimeout(dur: FiniteDuration): Unit =
-    eventLoop.schedule(() => {
-      currentTimeout = null
-      execute(currentState.onTimeout())
-      null
-    }, dur.toMillis, TimeUnit.MILLISECONDS)
+  private[fsm] def scheduleTimeout(dur: FiniteDuration): Unit = {
+    currentTimeout = eventLoop.schedule(
+      () => {
+        logger.debug(s"Timeout ${currentTimeout.hashCode} triggered")
+        currentTimeout = null
+        execute(currentState.onTimeout())
+      },
+      dur.toMillis,
+      TimeUnit.MILLISECONDS
+    )
+    logger.debug(s"Timeout ${currentTimeout.hashCode} scheduled")
+  }
 
   private[fsm] def cancelTimeout(): Unit =
-    if (currentTimeout != null) {
-      currentTimeout.cancel(true)
+    if (currentTimeout == null) {
+      logger.debug("Couldn't cancel timeout because it wasn't set")
+    } else {
+      if (currentTimeout.cancel(true)) {
+        logger.debug(s"Timeout ${currentTimeout.hashCode} cancelled")
+      } else {
+        logger.debug(s"Failed to cancel timeout ${currentTimeout.hashCode}")
+      }
       currentTimeout = null
     }
 

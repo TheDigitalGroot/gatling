@@ -567,9 +567,25 @@
         - keyword: between
           description: Check that the value of the statistic is between two thresholds
           syntax:
-            - signature: (thresholdMin,thresholdMax)
+            - signature: (thresholdMin, thresholdMax)
               description: the statistic's bounds
             - signature: (thresholdMin,thresholdMax, inclusive = false)
+              description: the statistic's bounds, excluded
+
+        - keyword: around
+          description: Check that the value of the metric is around a target value plus or minus a given margin.
+          syntax:
+            - signature: (value, margin)
+              description: the statistic's target and bounds margin
+            - signature: (value, margin, inclusive = false)
+              description: the statistic's bounds, excluded
+
+        - keyword: deviatesAround
+          description: Check that metric is around a target value plus or minus a given relative margin
+          syntax:
+            - signature: (value, relativeMargin)
+              description: the statistic's target and bounds margin
+            - signature: (thresholdMin, thresholdMax, inclusive = false)
               description: the statistic's bounds, excluded
 
         - keyword: is
@@ -583,7 +599,6 @@
           syntax:
             - signature: (sequence)
               description: the <i>sequence</i> the statistic has to be in
-
 
 - title: HTTP Action
   description: Define the HTTP requests sent in your scenario
@@ -691,6 +706,12 @@
         - keyword: ignoreProtocolHeaders
           description: Ignore default headers that were defined on the HttpProtocol
 
+        - keyword: requestTimeout
+          description: Override the requestTimeout defined in the global configuration
+          syntax:
+            - signature: (timeout)
+              description: A FiniteDuration, eg 3 minutes
+
         - keyword: sign
           description: Pass a `SignatureCalculator` to sign the request.
           syntax:
@@ -776,7 +797,9 @@
               description: Sets a string
             - signature: (ByteArrayBodyPart(bytes))
               description: Sets the body from a bytes array
-            - signature: (PebbleBodyPart(path))
+            - signature: (PebbleStringBodyPart(path))
+              description: Parses, resolves and then uploads a Pebble template from the <i>string</i>
+            - signature: (PebbleBodyFilePart(string))
               description: Parses, resolves and then uploads a Pebble template from the <i>path</i>
 
         - keyword: formParam
@@ -921,6 +944,9 @@
 
         - keyword: bodyBytes
           description: Return the full response body byte array.
+
+        - keyword: bodyLength
+          description: Return the length of the response body in bytes (without the overhead of computing the bytes array).
 
         - keyword: bodyStream
           description: Return an InputStream of the full response body bytes.
@@ -1285,14 +1311,17 @@
         - keyword: localAddresses
           description: Binds the sockets from a list of specific local addresses instead of the default one
           syntax:
-          - signature: (InetAddress...)
-            description: Address Strings that will be turned into InetAddresses
+            - signature: (InetAddress...)
+              description: Address Strings that will be turned into InetAddresses
 
         - keyword: useAllLocalAddresses
           description: Binds the sockets from all available local addresses
+
+        - keyword: useAllLocalAddressesMatching
+          description: Binds the sockets from all available local addresses matching one of the pattern parameters
           syntax:
-            - signature: (InetAddress...)
-              description: Address Strings that will be turned into InetAddresses
+            - signature: (String...)
+              description: Pattern Strings that will be compiled into Java patterns
 
         - keyword: perUserKeyManagerFactory
           description: Configure a specific javax.net.ssl.KeyManagerFactory per virtual user

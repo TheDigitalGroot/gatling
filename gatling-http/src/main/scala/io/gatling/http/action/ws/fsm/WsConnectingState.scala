@@ -30,11 +30,11 @@ import com.typesafe.scalalogging.StrictLogging
 import io.netty.handler.codec.http.HttpResponseStatus.SWITCHING_PROTOCOLS
 import io.netty.handler.codec.http.cookie.Cookie
 
-object WsConnectingState {
+object WsConnectingState extends StrictLogging {
   private val WsConnectSuccessStatusCode = Some(Integer.toString(SWITCHING_PROTOCOLS.code))
 
   def gotoConnecting(fsm: WsFsm, session: Session, next: Either[Action, SendFrame]): NextWsState =
-    gotoConnecting(fsm, session, next, fsm.httpProtocol.wsPart.maxReconnects.getOrElse(0))
+    gotoConnecting(fsm, session, next, fsm.httpProtocol.wsPart.maxReconnects)
 
   def gotoConnecting(fsm: WsFsm, session: Session, next: Either[Action, SendFrame], remainingTries: Int): NextWsState = {
 
@@ -45,6 +45,7 @@ object WsConnectingState {
     // [fl]
     //
     // [fl]
+    logger.debug(s"Connecting to ${connectRequest.getUri}")
     val userSslContexts = SslContextSupport.sslContexts(session)
     httpEngine.executeRequest(
       connectRequest,
@@ -161,7 +162,7 @@ final case class WsConnectingState(fsm: WsFsm, session: Session, next: Either[Ac
 
   override def onWebSocketCrashed(t: Throwable, timestamp: Long): NextWsState = {
     // crash
-    logger.info(s"WebSocket crashed by the server while in Connecting state", t)
+    logger.debug(s"WebSocket crashed by the server while in Connecting state", t)
     val failedSession = session.markAsFailed
     logResponse(failedSession, connectActionName, connectStart, timestamp, KO, Some(t.rootMessage), None)
 

@@ -60,7 +60,7 @@ The building blocks for profile injection the way you want are:
 
 #. ``nothingFor(duration)``: Pause for a given duration.
 #. ``atOnceUsers(nbUsers)``: Injects a given number of users at once.
-#. ``rampUsers(nbUsers) during(duration)``: Injects a given number of users with a linear ramp over a given duration.
+#. ``rampUsers(nbUsers) during(duration)``: Injects a given number of users distributed evenly on a time window of a given duration.
 #. ``constantUsersPerSec(rate) during(duration)``: Injects users at a constant rate, defined in users per second, during a given duration. Users will be injected at regular intervals.
 #. ``constantUsersPerSec(rate) during(duration) randomized``: Injects users at a constant rate, defined in users per second, during a given duration. Users will be injected at randomized intervals.
 #. ``rampUsersPerSec(rate1) to (rate2) during(duration)``: Injects users from starting rate to target rate, defined in users per second, during a given duration. Users will be injected at regular intervals.
@@ -131,6 +131,22 @@ Sequential Scenarios
 It's also possible with ``andThen`` to chain scenarios so that children scenarios starts once all the users in the parent scenario terminate.
 
 .. includecode:: code/SimulationSetupSample.scala#andThen
+
+
+.. _no-shard:
+
+Disabling FrontLine Load Sharding
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+By default, FrontLine will distribute your injection profile amongst all injectors when running a distributed test from multiple node.
+
+This might not be the desirable behavior, typically when running a first initial scenario with one single user in order to fetch some auth token to be used by the actual scenario.
+Indeed, only one node would run this user, leaving the other nodes without an initialized token.
+
+You can user ``noShard`` to disable load sharding. In this case, all the node will use the injection and throttling profiles as defined in the Simulation.
+
+.. includecode:: code/SimulationSetupSample.scala#noShard
+
 
 .. _simulation-setup-pause:
 

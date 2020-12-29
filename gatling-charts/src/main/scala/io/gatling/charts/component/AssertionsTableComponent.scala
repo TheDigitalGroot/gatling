@@ -17,7 +17,7 @@
 package io.gatling.charts.component
 
 import io.gatling.charts.util.HtmlHelper.HtmlRichString
-import io.gatling.commons.stats.assertion.AssertionResult
+import io.gatling.commons.shared.unstable.model.stats.assertion.AssertionResult
 
 private[charts] class AssertionsTableComponent(assertionResults: List[AssertionResult]) extends Component {
 
@@ -43,9 +43,8 @@ private[charts] class AssertionsTableComponent(assertionResults: List[AssertionR
             </tr>
         </thead>
 		<tbody>
-		    ${assertionResults.zipWithIndex.map {
-        case (assertionResult, index) =>
-          s"""
+		    ${assertionResults.zipWithIndex.map { case (assertionResult, index) =>
+        s"""
 		    <tr>
 		    	<td class="error-col-1 ${resultStyle(assertionResult)} total">${assertionResult.message.htmlEscape}<span class="value" style="display:none">$index</span></td>
 		    	<td class="error-col-2 value ${resultStyle(assertionResult)} total">${if (assertionResult.result) "OK" else "KO"}</td>

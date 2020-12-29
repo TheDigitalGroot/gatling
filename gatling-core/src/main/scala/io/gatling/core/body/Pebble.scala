@@ -18,11 +18,13 @@ package io.gatling.core.body
 
 import java.{ util => ju }
 
-import scala.collection.JavaConverters._
+import scala.collection.immutable
+import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import io.gatling.commons.validation._
-import io.gatling.core.session.Session
+import io.gatling.core.session.{ Session, SessionPrivateAttributes }
 import io.gatling.core.util.{ ClasspathFileResource, ClasspathPackagedResource, FilesystemResource, Resource }
 
 import com.mitchellbosecke.pebble.PebbleEngine
@@ -49,15 +51,38 @@ private[gatling] object Pebble extends StrictLogging {
   private val StringEngine = new PebbleEngine.Builder().autoEscaping(false).extension(PebbleExtensions.extensions: _*).loader(new StringLoader).build
   private val DelegatingEngine = new PebbleEngine.Builder().autoEscaping(false).extension(PebbleExtensions.extensions: _*).build
 
-  private def matchMap(map: Map[String, Any]): ju.Map[String, AnyRef] = {
+  private def mutableSeqToJava(c: mutable.Seq[_]): ju.List[AnyRef] =
+    c.map(anyRefToJava).asJava
+
+  private def immutableSeqToJava(c: immutable.Seq[_]): ju.List[AnyRef] =
+    c.map(anyRefToJava).asJava
+
+  private def mutableSetToJava(c: mutable.Set[_]): ju.Set[AnyRef] =
+    c.map(anyRefToJava).asJava
+
+  private def immutableSetToJava(c: immutable.Set[_]): ju.Set[AnyRef] =
+    c.map(anyRefToJava).asJava
+
+  private def mutableMapToJava(c: mutable.Map[_, _]): ju.Map[_, AnyRef] =
+    (Map.empty ++ c.view.mapValues(anyRefToJava)).asJava
+
+  private def immutableMapToJava(c: immutable.Map[_, _]): ju.Map[_, AnyRef] =
+    (Map.empty ++ c.view.mapValues(anyRefToJava)).asJava
+
+  private def anyRefToJava(any: Any): AnyRef = any match {
+    case c: mutable.Seq[_]      => mutableSeqToJava(c)
+    case c: immutable.Seq[_]    => immutableSeqToJava(c)
+    case s: mutable.Set[_]      => mutableSetToJava(s)
+    case s: immutable.Set[_]    => immutableSetToJava(s)
+    case m: mutable.Map[_, _]   => mutableMapToJava(m)
+    case m: immutable.Map[_, _] => immutableMapToJava(m)
+    case anyRef: AnyRef         => anyRef // the AnyVal case is not addressed, as an AnyVal will be in an AnyRef wrapper
+  }
+
+  private[body] def sessionAttributesToJava(map: Map[String, Any]): ju.Map[String, AnyRef] = {
     val jMap = new ju.HashMap[String, AnyRef](map.size)
-    for ((k, v) <- map) {
-      val javaValue = v match {
-        case c: Seq[Any]      => c.asJava
-        case c: Iterable[Any] => c.asJavaCollection
-        case any: AnyRef      => any // the AnyVal case is not addressed, as an AnyVal will be in an AnyRef wrapper
-      }
-      jMap.put(k, javaValue)
+    for ((k, v) <- map if !k.startsWith(SessionPrivateAttributes.PrivateAttributePrefix)) {
+      jMap.put(k, anyRefToJava(v))
     }
     jMap
   }
@@ -87,14 +112,14 @@ private[gatling] object Pebble extends StrictLogging {
     }
 
   def evaluateTemplate(template: PebbleTemplate, session: Session): Validation[String] = {
-    val context = matchMap(session.attributes)
+    val context = sessionAttributesToJava(session.attributes)
     val writer = PooledSpecializedStringWriter.pooled
     try {
       template.evaluate(writer, context)
       writer.toString.success
     } catch {
       case NonFatal(e) =>
-        logger.info("Error while evaluate Pebble template", e)
+        logger.debug("Error while evaluating Pebble template", e)
         e.getMessage.failure
     }
   }

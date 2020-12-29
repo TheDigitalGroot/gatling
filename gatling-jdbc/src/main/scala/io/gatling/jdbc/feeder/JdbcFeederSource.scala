@@ -20,15 +20,14 @@ import java.sql.DriverManager
 import java.sql.ResultSet.{ CONCUR_READ_ONLY, TYPE_FORWARD_ONLY }
 
 import scala.annotation.tailrec
-import scala.collection.breakOut
+import scala.util.Using
 
-import io.gatling.commons.util.Io._
 import io.gatling.core.feeder.Record
 
 object JdbcFeederSource {
 
   def apply(url: String, username: String, password: String, sql: String): Vector[Record[Any]] =
-    withCloseable(DriverManager.getConnection(url, username, password)) { connection =>
+    Using.resource(DriverManager.getConnection(url, username, password)) { connection =>
       val preparedStatement = connection.prepareStatement(sql, TYPE_FORWARD_ONLY, CONCUR_READ_ONLY)
       val resultSet = preparedStatement.executeQuery
       val metadata = resultSet.getMetaData
@@ -37,7 +36,7 @@ object JdbcFeederSource {
       val columnLabels = for (i <- 1 to columnCount) yield metadata.getColumnLabel(i)
 
       def computeRecord: Record[Any] =
-        (for (i <- 1 to columnCount) yield columnLabels(i - 1) -> resultSet.getObject(i))(breakOut)
+        (1 to columnCount).view.map(i => columnLabels(i - 1) -> resultSet.getObject(i)).to(Map)
 
       @tailrec
       def loadRec(records: Vector[Record[Any]]): Vector[Record[Any]] =

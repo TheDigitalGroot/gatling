@@ -20,13 +20,15 @@ import java.io.InputStream
 import java.nio.ByteBuffer
 import java.util.Base64
 
-import scala.collection.{ breakOut, mutable }
+import scala.collection.immutable.ArraySeq
+import scala.collection.mutable
 import scala.io.Source
 
 import io.gatling.charts.stats.buffers.{ CountsBuffer, GeneralStatsBuffer, PercentilesBuffers }
+import io.gatling.commons.shared.unstable.model.stats.{ ErrorStats, GeneralStats, GeneralStatsSource, Group, GroupStatsPath, RequestStatsPath, StatsPath }
+import io.gatling.commons.shared.unstable.util.PathHelper._
 import io.gatling.commons.stats._
 import io.gatling.commons.stats.assertion.Assertion
-import io.gatling.commons.util.PathHelper._
 import io.gatling.core.config.GatlingConfiguration
 import io.gatling.core.config.GatlingFiles.simulationLogDirectory
 import io.gatling.core.stats.message.MessageEvent
@@ -252,20 +254,11 @@ private[gatling] class LogFileReader(runUuid: String)(implicit configuration: Ga
       }
 
       def process(buffer: Iterable[IntVsTimePlot]): Seq[PercentVsTimePlot] = {
+        val bucketsWithValues: Map[Int, Double] =
+          buffer
+            .groupMapReduce(record => bucketFunction(record.time))(record => percent(record.value))(_ + _)
 
-        val bucketsWithValues: Map[Int, Double] = buffer
-          .map(record => (bucketFunction(record.time), record))
-          .groupBy(_._1)
-          .map {
-            case (responseTimeBucket, recordList) =>
-              val bucketSize = recordList.foldLeft(0) { (partialSize, record) =>
-                partialSize + record._2.value
-              }
-
-              (responseTimeBucket, percent(bucketSize))
-          }(breakOut)
-
-        buckets.map { bucket =>
+        ArraySeq.unsafeWrapArray(buckets).map { bucket =>
           new PercentVsTimePlot(bucket, bucketsWithValues.getOrElse(bucket, 0.0))
         }
       }
@@ -330,27 +323,22 @@ private[gatling] class LogFileReader(runUuid: String)(implicit configuration: Ga
   def responseTimePercentilesOverTime(status: Status, requestName: Option[String], group: Option[Group]): Iterable[PercentilesVsTimePlot] =
     resultsHolder.getResponseTimePercentilesBuffers(requestName, group, status).percentiles
 
-  private def timeAgainstGlobalNumberOfRequestsPerSec(
-      buffer: PercentilesBuffers,
-      status: Status,
-      requestName: String,
-      group: Option[Group]
-  ): Seq[IntVsTimePlot] = {
+  private def timeAgainstGlobalNumberOfRequestsPerSec(buffer: PercentilesBuffers): Seq[IntVsTimePlot] = {
 
     val globalCountsByBucket = resultsHolder.getRequestsPerSecBuffer(None, None).counts
 
     buffer.digests.view.zipWithIndex
-      .collect {
-        case (Some(digest), bucketNumber) =>
-          val count = globalCountsByBucket(bucketNumber)
-          new IntVsTimePlot(toNumberPerSec(count.total), digest.quantile(0.95).toInt)
+      .collect { case (Some(digest), bucketNumber) =>
+        val count = globalCountsByBucket(bucketNumber)
+        new IntVsTimePlot(toNumberPerSec(count.total), digest.quantile(0.95).toInt)
       }
+      .to(Seq)
       .sortBy(_.time)
   }
 
   def responseTimeAgainstGlobalNumberOfRequestsPerSec(status: Status, requestName: String, group: Option[Group]): Seq[IntVsTimePlot] = {
     val percentilesBuffer = resultsHolder.getResponseTimePercentilesBuffers(Some(requestName), group, status)
-    timeAgainstGlobalNumberOfRequestsPerSec(percentilesBuffer, status, requestName, group)
+    timeAgainstGlobalNumberOfRequestsPerSec(percentilesBuffer)
   }
 
   def groupCumulatedResponseTimePercentilesOverTime(status: Status, group: Group): Iterable[PercentilesVsTimePlot] =

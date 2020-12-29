@@ -255,7 +255,7 @@ public class DefaultHttpClient implements HttpClient {
 
     if (eventLoop.inEventLoop()) {
       sendTx(tx, eventLoop);
-    } else {
+    } else if (!eventLoop.isShutdown()) {
       eventLoop.execute(() -> sendTx(tx, eventLoop));
     }
   }
@@ -293,7 +293,7 @@ public class DefaultHttpClient implements HttpClient {
 
     if (eventLoop.inEventLoop()) {
       sendHttp2Txs(txs, eventLoop);
-    } else {
+    } else if (!eventLoop.isShutdown()) {
       eventLoop.execute(() -> sendHttp2Txs(txs, eventLoop));
     }
   }
@@ -349,12 +349,14 @@ public class DefaultHttpClient implements HttpClient {
     Request request = tx.request;
     HttpListener listener = tx.listener;
     RequestTimeout requestTimeout = tx.requestTimeout;
+    Uri requestUri = request.getUri();
+    boolean tryHttp2 = request.isHttp2Enabled() && requestUri.isSecured() && !requestUri.isWebSocket();
 
     // use a fresh channel for WebSocket
-    Channel pooledChannel = request.getUri().isWebSocket() ? null : resources.channelPool.poll(tx.key);
+    Channel pooledChannel = requestUri.isWebSocket() ? null : resources.channelPool.poll(tx.key);
 
     listener.onSend();
-    if (request.getUri().isSecured() && request.isHttp2Enabled() && !config.isEnableSni()) {
+    if (tryHttp2 && !config.isEnableSni()) {
       listener.onThrowable(new UnsupportedOperationException("HTTP/2 can't work if SNI is disabled."));
       return;
     }
@@ -366,7 +368,10 @@ public class DefaultHttpClient implements HttpClient {
       sendTxWithChannel(tx, pooledChannel);
 
     } else {
-      resolveRemoteAddresses(request, eventLoop, listener, requestTimeout)
+      InetSocketAddress unresolvedRemoteAddressThroughTunnelling = unresolvedRemoteAddressThroughTunnelling(request.getProxyServer(), requestUri);
+      boolean logProxyAddress = unresolvedRemoteAddressThroughTunnelling != null;
+
+      resolveRemoteAddresses(request, eventLoop, unresolvedRemoteAddressThroughTunnelling, listener, requestTimeout)
         .addListener((Future<List<InetSocketAddress>> whenRemoteAddresses) -> {
           if (requestTimeout.isDone()) {
             return;
@@ -375,17 +380,17 @@ public class DefaultHttpClient implements HttpClient {
           if (whenRemoteAddresses.isSuccess()) {
             List<InetSocketAddress> addresses = whenRemoteAddresses.getNow();
 
-            if (request.isHttp2Enabled() && tx.channelState != HttpTx.ChannelState.RETRY) {
-              String domain = tx.request.getUri().getHost();
+            if (tryHttp2 && tx.channelState != HttpTx.ChannelState.RETRY) {
+              String domain = requestUri.getHost();
               Channel coalescedChannel = resources.channelPool.pollCoalescedChannel(tx.key.clientId, domain, addresses);
               if (coalescedChannel != null) {
                 tx.listener.onProtocolAwareness(true);
                 sendTxWithChannel(tx, coalescedChannel);
               } else {
-                sendTxWithNewChannel(tx, resources, eventLoop, addresses);
+                sendTxWithNewChannel(tx, resources, eventLoop, addresses, logProxyAddress);
               }
             } else {
-              sendTxWithNewChannel(tx, resources, eventLoop, addresses);
+              sendTxWithNewChannel(tx, resources, eventLoop, addresses, logProxyAddress);
             }
           }
         });
@@ -399,13 +404,18 @@ public class DefaultHttpClient implements HttpClient {
     Request request = tx.request;
     HttpListener listener = tx.listener;
     RequestTimeout requestTimeout = tx.requestTimeout;
+    Uri requestUri = request.getUri();
 
     // start timeouts
     for (HttpTx t : txs) {
       t.requestTimeout.start(eventLoop);
     }
 
-    resolveRemoteAddresses(request, eventLoop, listener, requestTimeout)
+    ProxyServer proxyServer = request.getProxyServer();
+    InetSocketAddress unresolvedRemoteAddressThroughTunnelling = unresolvedRemoteAddressThroughTunnelling(proxyServer, requestUri);
+    boolean logProxyAddress = unresolvedRemoteAddressThroughTunnelling != null;
+
+    resolveRemoteAddresses(request, eventLoop, unresolvedRemoteAddressThroughTunnelling, listener, requestTimeout)
       .addListener((Future<List<InetSocketAddress>> whenRemoteAddresses) -> {
         if (requestTimeout.isDone()) {
           return;
@@ -414,12 +424,12 @@ public class DefaultHttpClient implements HttpClient {
         if (whenRemoteAddresses.isSuccess()) {
           List<InetSocketAddress> addresses = whenRemoteAddresses.getNow();
 
-          String domain = tx.request.getUri().getHost();
+          String domain = requestUri.getHost();
           Channel coalescedChannel = resources.channelPool.pollCoalescedChannel(tx.key.clientId, domain, addresses);
           if (coalescedChannel != null) {
             sendHttp2TxsWithChannel(txs, coalescedChannel);
           } else {
-            sendHttp2TxsWithNewChannel(txs, resources, eventLoop, addresses);
+            sendHttp2TxsWithNewChannel(txs, resources, eventLoop, addresses, logProxyAddress);
           }
         }
       });
@@ -461,16 +471,20 @@ public class DefaultHttpClient implements HttpClient {
     }
   }
 
-  private Future<List<InetSocketAddress>> resolveRemoteAddresses(Request request, EventLoop eventLoop, HttpListener listener, RequestTimeout requestTimeout) {
-    if (request.getProxyServer() != null) {
-      ProxyServer proxyServer = request.getProxyServer();
-      Uri uri = request.getUri();
-      InetSocketAddress remoteAddress =
-        proxyServer instanceof SockProxyServer || uri.isSecured() || uri.isWebSocket() ?
-          // ProxyHandler will take care of the connect logic
-          InetSocketAddress.createUnresolved(request.getUri().getHost(), request.getUri().getExplicitPort()) :
-          // directly connect to proxy over clear HTTP
-          request.getProxyServer().getAddress();
+  private InetSocketAddress unresolvedRemoteAddressThroughTunnelling(ProxyServer proxyServer, Uri requestUri) {
+    return proxyServer != null && (proxyServer instanceof SockProxyServer || requestUri.isSecured() || requestUri.isWebSocket()) ?
+      InetSocketAddress.createUnresolved(requestUri.getHost(), requestUri.getExplicitPort()) :
+      null;
+  }
+
+  private Future<List<InetSocketAddress>> resolveRemoteAddresses(Request request, EventLoop eventLoop, InetSocketAddress unresolvedRemoteAddressThroughTunnelling, HttpListener listener, RequestTimeout requestTimeout) {
+    ProxyServer proxyServer = request.getProxyServer();
+    if (proxyServer != null) {
+      InetSocketAddress remoteAddress = unresolvedRemoteAddressThroughTunnelling != null ?
+        // ProxyHandler will take care of the connect logic
+        unresolvedRemoteAddressThroughTunnelling :
+        // directly connect to proxy over clear HTTP
+        proxyServer.getAddress();
 
       return ImmediateEventExecutor.INSTANCE.newSucceededFuture(singletonList(remoteAddress));
 
@@ -501,9 +515,10 @@ public class DefaultHttpClient implements HttpClient {
   private void sendTxWithNewChannel(HttpTx tx,
                                     EventLoopResources resources,
                                     EventLoop eventLoop,
-                                    List<InetSocketAddress> addresses) {
+                                    List<InetSocketAddress> addresses,
+                                    boolean logProxyAddress) {
     tx.channelState = HttpTx.ChannelState.NEW;
-    openNewChannel(tx.request, eventLoop, resources, addresses, tx.listener, tx.requestTimeout)
+    openNewChannel(tx.request, logProxyAddress, eventLoop, resources, addresses, tx.listener, tx.requestTimeout)
       .addListener((Future<Channel> whenNewChannel) -> {
         if (whenNewChannel.isSuccess()) {
           Channel channel = whenNewChannel.getNow();
@@ -547,9 +562,10 @@ public class DefaultHttpClient implements HttpClient {
   private void sendHttp2TxsWithNewChannel(List<HttpTx> txs,
                                           EventLoopResources resources,
                                           EventLoop eventLoop,
-                                          List<InetSocketAddress> addresses) {
+                                          List<InetSocketAddress> addresses,
+                                          boolean logProxyAddress) {
     HttpTx tx = txs.get(0);
-    openNewChannel(tx.request, eventLoop, resources, addresses, tx.listener, tx.requestTimeout)
+    openNewChannel(tx.request, logProxyAddress, eventLoop, resources, addresses, tx.listener, tx.requestTimeout)
       .addListener((Future<Channel> whenNewChannel) -> {
         if (whenNewChannel.isSuccess()) {
           Channel channel = whenNewChannel.getNow();
@@ -607,6 +623,7 @@ public class DefaultHttpClient implements HttpClient {
   }
 
   private Future<Channel> openNewChannel(Request request,
+                                         boolean logProxyAddress,
                                          EventLoop eventLoop,
                                          EventLoopResources resources,
                                          List<InetSocketAddress> remoteAddresses,
@@ -615,7 +632,8 @@ public class DefaultHttpClient implements HttpClient {
 
     Bootstrap bootstrap = bootstrap(request, resources);
     Promise<Channel> channelPromise = eventLoop.newPromise();
-    openNewChannelRec(remoteAddresses, localAddressWithRandomPort(request.getLocalIpV4Address()), localAddressWithRandomPort(request.getLocalIpV6Address()), 0, channelPromise, bootstrap, listener, requestTimeout);
+    InetSocketAddress loggedProxyAddress = logProxyAddress ? request.getProxyServer().getAddress() : null;
+    openNewChannelRec(remoteAddresses, loggedProxyAddress, localAddressWithRandomPort(request.getLocalIpV4Address()), localAddressWithRandomPort(request.getLocalIpV6Address()), 0, channelPromise, bootstrap, listener, requestTimeout);
     return channelPromise;
   }
 
@@ -627,6 +645,7 @@ public class DefaultHttpClient implements HttpClient {
   };
 
   private void openNewChannelRec(List<InetSocketAddress> remoteAddresses,
+                                 InetSocketAddress loggedProxyAddress,
                                  InetSocketAddress localIpV4Address,
                                  InetSocketAddress localIpV6Address,
                                  int i,
@@ -662,7 +681,7 @@ public class DefaultHttpClient implements HttpClient {
     if (forceMoveToNextRemoteAddress) {
       int nextI = i + 1;
       if (nextI < remoteAddresses.size()) {
-        openNewChannelRec(remoteAddresses, localIpV4Address, null, nextI, channelPromise, bootstrap, listener, requestTimeout);
+        openNewChannelRec(remoteAddresses, loggedProxyAddress, localIpV4Address, null, nextI, channelPromise, bootstrap, listener, requestTimeout);
 
       } else {
         requestTimeout.cancel();
@@ -698,7 +717,7 @@ public class DefaultHttpClient implements HttpClient {
 
           int nextI = i + 1;
           if (nextI < remoteAddresses.size()) {
-            openNewChannelRec(remoteAddresses, localIpV4Address, localIpV6Address, nextI, channelPromise, bootstrap, listener, requestTimeout);
+            openNewChannelRec(remoteAddresses, loggedProxyAddress, localIpV4Address, localIpV6Address, nextI, channelPromise, bootstrap, listener, requestTimeout);
 
           } else {
             requestTimeout.cancel();
@@ -775,7 +794,7 @@ public class DefaultHttpClient implements HttpClient {
                   connection,
                   new ChunkedInboundHttp2ToHttpAdapter(connection, false, true, whenAlpn) {
                     @Override
-                    public void onGoAwayRead(ChannelHandlerContext ctx, int lastStreamId, long errorCode, ByteBuf debugData) throws Http2Exception {
+                    public void onGoAwayRead(ChannelHandlerContext ctx, int lastStreamId, long errorCode, ByteBuf debugData) {
                       ctx.fireChannelRead(new Http2AppHandler.GoAwayFrame(lastStreamId, errorCode));
                     }
                   })
@@ -793,7 +812,7 @@ public class DefaultHttpClient implements HttpClient {
               LOGGER.debug("TLS handshake successful: protocol={} cipher suite={}", sslHandler.engine().getSession().getProtocol(), sslHandler.engine().getSession().getCipherSuite());
             }
             if (!subjectAlternativeNames.isEmpty()) {
-              channelPool.addCoalescedChannel(subjectAlternativeNames, (InetSocketAddress) channel.remoteAddress(), channel, tx.key);
+              channelPool.offerCoalescedChannel(subjectAlternativeNames, (InetSocketAddress) channel.remoteAddress(), channel, tx.key);
             }
             break;
 
@@ -840,7 +859,7 @@ public class DefaultHttpClient implements HttpClient {
   public void flushClientIdChannels(long clientId, EventLoop eventLoop) {
     if (eventLoop.inEventLoop()) {
       eventLoopResources(eventLoop).channelPool.flushClientIdChannelPoolPartitions(clientId);
-    } else {
+    } else if (!eventLoop.isShutdown()) {
       eventLoop.execute(() -> eventLoopResources(eventLoop).channelPool.flushClientIdChannelPoolPartitions(clientId));
     }
   }

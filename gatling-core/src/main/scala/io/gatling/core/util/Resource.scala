@@ -16,14 +16,16 @@
 
 package io.gatling.core.util
 
-import java.io.{ File, FileInputStream, FileOutputStream, InputStream }
-import java.net.URL
+import java.io._
+import java.net.{ URISyntaxException, URL }
 import java.nio.charset.Charset
 import java.nio.file.{ Files, Path, Paths }
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.util.Using
+
+import io.gatling.commons.shared.unstable.util.PathHelper._
 import io.gatling.commons.util.Io._
-import io.gatling.commons.util.PathHelper._
 import io.gatling.commons.validation._
 
 object Resource {
@@ -31,11 +33,24 @@ object Resource {
   private final case class Location(directory: Path, path: String)
 
   private object ClasspathResource {
+
+    private def urlToFile(url: URL): File =
+      try {
+        new File(url.toURI)
+      } catch {
+        case _: URISyntaxException => new File(url.getPath)
+      }
+
     def unapply(location: Location): Option[Validation[Resource]] = {
-      val cleanPath = location.path.replace('\\', '/')
+      val cleanPath = location.path
+        .replace('\\', '/')
+        .replace("src/test/resources/", "")
+        .replace("src/main/resources/", "")
+        .replace("src/gatling/resources/", "")
+
       Option(getClass.getClassLoader.getResource(cleanPath)).map { url =>
         url.getProtocol match {
-          case "file" => ClasspathFileResource(cleanPath, url.file).success
+          case "file" => ClasspathFileResource(cleanPath, urlToFile(url)).success
           case "jar"  => ClasspathPackagedResource(cleanPath, url).success
           case _      => s"$url is neither a file nor a jar".failure
         }
@@ -70,8 +85,8 @@ object Resource {
 sealed trait Resource {
   def name: String
   def file: File
-  def inputStream: InputStream = new FileInputStream(file)
-  def string(charset: Charset): String = withCloseable(inputStream) { _.toString(charset) }
+  def inputStream: InputStream = new BufferedInputStream(new FileInputStream(file))
+  def string(charset: Charset): String = Using.resource(inputStream) { _.toString(charset) }
   def bytes: Array[Byte] = Files.readAllBytes(file.toPath)
 }
 
@@ -88,10 +103,8 @@ final case class ClasspathPackagedResource(path: String, url: URL) extends Resou
     val tempFile = File.createTempFile("gatling-" + name, null)
     tempFile.deleteOnExit()
 
-    withCloseable(url.openStream()) { is =>
-      withCloseable(new FileOutputStream(tempFile, false)) { os =>
-        is.copyTo(os)
-      }
+    Using.resources(url.openStream(), new BufferedOutputStream(new FileOutputStream(tempFile, false))) { (is, os) =>
+      is.copyTo(os)
     }
     tempFile
   }

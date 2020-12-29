@@ -11,10 +11,32 @@ import VersionFile._
 
 ThisBuild / Keys.useCoursier := false
 
+scalaVersion := "2.13.4"
+
 lazy val root = Project("gatling-parent", file("."))
   .enablePlugins(AutomateHeaderPlugin, SonatypeReleasePlugin, SphinxPlugin)
   .dependsOn(Seq(commons, jsonpath, core, http, jms, mqtt, jdbc, redis).map(_ % "compile->compile;test->test"): _*)
-  .aggregate(nettyUtil, commons, jsonpath, core, jdbc, redis, httpClient, http, jms, mqtt, charts, graphite, app, recorder, testFramework, bundle, compiler)
+  .aggregate(
+    nettyUtil,
+    commonsShared,
+    commonsSharedUnstable,
+    commons,
+    jsonpath,
+    core,
+    jdbc,
+    redis,
+    httpClient,
+    http,
+    jms,
+    mqtt,
+    charts,
+    graphite,
+    app,
+    recorder,
+    testFramework,
+    bundle,
+    compiler
+  )
   .settings(basicSettings)
   .settings(skipPublishing)
   .settings(libraryDependencies ++= docDependencies)
@@ -30,9 +52,18 @@ def gatlingModule(id: String) =
 lazy val nettyUtil = gatlingModule("gatling-netty-util")
   .settings(libraryDependencies ++= nettyUtilDependencies)
 
-lazy val commons = gatlingModule("gatling-commons")
+lazy val commonsShared = gatlingModule("gatling-commons-shared")
   .dependsOn(nettyUtil % "compile->compile;test->test")
-  .settings(libraryDependencies ++= commonsDependencies(scalaVersion.value))
+  .settings(libraryDependencies ++= commonsSharedDependencies(scalaVersion.value))
+
+lazy val commonsSharedUnstable = gatlingModule("gatling-commons-shared-unstable")
+  .dependsOn(commonsShared)
+  .settings(libraryDependencies ++= commonsSharedUnstableDependencies)
+
+lazy val commons = gatlingModule("gatling-commons")
+  .dependsOn(commonsShared % "compile->compile;test->test")
+  .dependsOn(commonsSharedUnstable)
+  .settings(libraryDependencies ++= commonsDependencies)
   .settings(generateVersionFileSettings)
 
 lazy val jsonpath = gatlingModule("gatling-jsonpath")
@@ -105,7 +136,7 @@ lazy val bundle = gatlingModule("gatling-bundle")
   .settings(generateConfigFiles(recorder))
   .settings(copyLogbackXml(core))
   .settings(bundleSettings)
-  .settings(exportJars := false, noArtifactToPublish)
+  .settings(exportJars := false, publishArtifact in Compile := false)
   .settings(CodeAnalysis.disable)
 
 addCommandAlias(

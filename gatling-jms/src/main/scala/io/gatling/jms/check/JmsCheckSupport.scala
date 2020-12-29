@@ -41,49 +41,54 @@ trait JmsCheckSupport {
   def simpleCheck(f: Message => Boolean): JmsSimpleCheck = new JmsSimpleCheck(f)
 
   @implicitNotFound("Could not find a CheckMaterializer. This check might not be valid for JMS.")
-  implicit def checkBuilder2JmsCheck[A, P, X](
-      checkBuilder: CheckBuilder[A, P, X]
-  )(implicit materializer: CheckMaterializer[A, JmsCheck, Message, P]): JmsCheck =
+  implicit def checkBuilder2JmsCheck[T, P, X](
+      checkBuilder: CheckBuilder[T, P, X]
+  )(implicit materializer: CheckMaterializer[T, JmsCheck, Message, P]): JmsCheck =
     checkBuilder.build(materializer)
 
   @implicitNotFound("Could not find a CheckMaterializer. This check might not be valid for JMS.")
-  implicit def validatorCheckBuilder2JmsCheck[A, P, X](
-      validatorCheckBuilder: ValidatorCheckBuilder[A, P, X]
-  )(implicit materializer: CheckMaterializer[A, JmsCheck, Message, P]): JmsCheck =
+  implicit def validatorCheckBuilder2JmsCheck[T, P, X](
+      validatorCheckBuilder: ValidatorCheckBuilder[T, P, X]
+  )(implicit materializer: CheckMaterializer[T, JmsCheck, Message, P]): JmsCheck =
     validatorCheckBuilder.exists
 
   @implicitNotFound("Could not find a CheckMaterializer. This check might not be valid for JMS.")
-  implicit def findCheckBuilder2JmsCheck[A, P, X](
-      findCheckBuilder: FindCheckBuilder[A, P, X]
-  )(implicit materializer: CheckMaterializer[A, JmsCheck, Message, P]): JmsCheck =
+  implicit def findCheckBuilder2JmsCheck[T, P, X](
+      findCheckBuilder: FindCheckBuilder[T, P, X]
+  )(implicit materializer: CheckMaterializer[T, JmsCheck, Message, P]): JmsCheck =
     findCheckBuilder.find.exists
 
-  implicit def jmsBodyBytesCheckMaterializer(
-      implicit configuration: GatlingConfiguration
+  implicit def jmsBodyBytesCheckMaterializer(implicit
+      configuration: GatlingConfiguration
   ): CheckMaterializer[BodyBytesCheckType, JmsCheck, Message, Array[Byte]] =
     JmsCheckMaterializer.bodyBytes(configuration.core.charset)
 
-  implicit def jmsBodyStringCheckMaterializer(
-      implicit configuration: GatlingConfiguration
+  implicit def jmsBodyLengthCheckMaterializer(implicit
+      configuration: GatlingConfiguration
+  ): CheckMaterializer[BodyBytesCheckType, JmsCheck, Message, Int] =
+    JmsCheckMaterializer.bodyLength(configuration.core.charset)
+
+  implicit def jmsBodyStringCheckMaterializer(implicit
+      configuration: GatlingConfiguration
   ): CheckMaterializer[BodyStringCheckType, JmsCheck, Message, String] =
     JmsCheckMaterializer.bodyString(configuration.core.charset)
 
-  implicit def jmsBodySubstringCheckMaterializer(
-      implicit configuration: GatlingConfiguration
+  implicit def jmsBodySubstringCheckMaterializer(implicit
+      configuration: GatlingConfiguration
   ): CheckMaterializer[SubstringCheckType, JmsCheck, Message, String] =
     JmsCheckMaterializer.substring(configuration.core.charset)
 
   implicit val jmsXPathmaterializer: CheckMaterializer[XPathCheckType, JmsCheck, Message, Option[XdmNode]] =
     JmsCheckMaterializer.Xpath
 
-  implicit def jmsJsonPathCheckMaterializer(
-      implicit jsonParsers: JsonParsers,
+  implicit def jmsJsonPathCheckMaterializer(implicit
+      jsonParsers: JsonParsers,
       configuration: GatlingConfiguration
   ): CheckMaterializer[JsonPathCheckType, JmsCheck, Message, JsonNode] =
     JmsCheckMaterializer.jsonPath(jsonParsers, configuration.core.charset)
 
-  implicit def jmsJmesPathCheckMaterializer(
-      implicit jsonParsers: JsonParsers,
+  implicit def jmsJmesPathCheckMaterializer(implicit
+      jsonParsers: JsonParsers,
       configuration: GatlingConfiguration
   ): CheckMaterializer[JmesPathCheckType, JmsCheck, Message, JsonNode] =
     JmsCheckMaterializer.jmesPath(jsonParsers, configuration.core.charset)

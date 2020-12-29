@@ -16,6 +16,8 @@
 
 package io.gatling.http.compile
 
+import java.nio.charset.StandardCharsets.UTF_8
+
 import scala.concurrent.duration._
 
 import io.gatling.core.Predef._
@@ -38,7 +40,7 @@ class WsCompileTest extends Simulation {
       ws("Connect WS")
         .connect("/room/chat?username=${id}")
         .subprotocol("FOO")
-        .await(1 second) {
+        .await(1.second) {
           ws.checkTextMessage("checkName")
             .matching(jsonPath("$.uuid").is("${correlation}"))
             .check(
@@ -53,7 +55,7 @@ class WsCompileTest extends Simulation {
         .await("${someLongOrFiniteDurationAttribute}") { // EL string
           ws.checkTextMessage("checkName")
         }
-        .await(_ => 1 second) { // expression
+        .await(_ => 1.second) { // expression
           ws.checkTextMessage("checkName")
         }
         .onConnected(
@@ -74,7 +76,7 @@ class WsCompileTest extends Simulation {
       ws("Message1")
         .wsName("foo")
         .sendText("""{"text": "Hello, I'm ${id} and this is message ${i}!"}""")
-        .await(30 seconds)(
+        .await(30.seconds)(
           ws.checkTextMessage("checkName1").check(jsonPath("$.message").findAll.saveAs("message1"))
         )
         .await(30)( // simple int
@@ -83,14 +85,14 @@ class WsCompileTest extends Simulation {
         .await("${someLongOrFiniteDurationAttribute}") { // EL string
           ws.checkTextMessage("checkName2").check(jsonPath("$.message").findAll.saveAs("message2"))
         }
-        .await(_ => 30 seconds)( // expression
+        .await(_ => 30.seconds)( // expression
           ws.checkTextMessage("checkName2").check(jsonPath("$.message").findAll.saveAs("message2"))
         )
     )
     .exec(
       ws("Message2")
         .sendText("""{"text": "Hello, I'm ${id} and this is message ${i}!"}""")
-        .await(30 seconds)(
+        .await(30.seconds)(
           ws.checkTextMessage("checkName1")
             .check(
               regex("somePattern1").saveAs("message1"),
@@ -102,17 +104,22 @@ class WsCompileTest extends Simulation {
     .exec(
       ws("Message3")
         .sendText("""{"text": "Hello, I'm ${id} and this is message ${i}!"}""")
-        .await(30 seconds)(
+        .await(30.seconds)(
           // match first message
           ws.checkTextMessage("checkName")
         )
     )
     .exec(
       ws("BinaryMessage")
-        .sendBytes("hello".getBytes())
-        .await(30 seconds)(
+        .sendBytes("hello".getBytes(UTF_8))
+        .await(30.seconds)(
           // match first message
-          ws.checkBinaryMessage("checkName").check(bodyBytes.transform(_.length).saveAs("bytesLength")).silent
+          ws.checkBinaryMessage("checkName")
+            .check(
+              bodyLength.lte(50),
+              bodyBytes.transform(_.length).saveAs("bytesLength")
+            )
+            .silent
         )
     )
     .exec(ws("Close WS").close)

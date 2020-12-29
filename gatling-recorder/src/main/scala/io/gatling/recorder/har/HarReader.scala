@@ -16,15 +16,14 @@
 
 package io.gatling.recorder.har
 
-import java.io.{ FileInputStream, InputStream }
+import java.io.{ BufferedInputStream, FileInputStream, InputStream }
 import java.net.{ URL, URLEncoder }
 import java.nio.charset.StandardCharsets.UTF_8
 import java.time.ZonedDateTime
 import java.util.{ Base64, Locale }
 
-import scala.util.Try
+import scala.util.{ Try, Using }
 
-import io.gatling.commons.util.Io._
 import io.gatling.commons.util.StringHelper._
 import io.gatling.core.filter.Filters
 import io.gatling.recorder.har.HarParser._
@@ -38,7 +37,7 @@ final case class HttpTransaction(request: HttpRequest, response: HttpResponse)
 private[recorder] object HarReader {
 
   def readFile(path: String, filters: Option[Filters]): Seq[HttpTransaction] =
-    withCloseable(new FileInputStream(path))(readStream(_, filters))
+    Using.resource(new BufferedInputStream(new FileInputStream(path)))(readStream(_, filters))
 
   private[har] def readStream(is: InputStream, filters: Option[Filters]): Seq[HttpTransaction] = {
     val harEntries = HarParser.parseHarEntries(is)
@@ -52,16 +51,15 @@ private[recorder] object HarReader {
 
   private def buildHttpTransactions(harEntries: Seq[HarEntry]): Seq[HttpTransaction] =
     harEntries.iterator
-    // filter out cancelled requests
+      // filter out cancelled requests
       .filter(_.response.status != 0)
       // filter out all non-HTTP protocols (eg: ws://)
       .filter(_.request.url.toString.toLowerCase(Locale.ROOT).startsWith("http"))
       // filter out CONNECT (if HAR was generated with a proxy such as Charles) and Upgrade requests (WebSockets)
-      .filter(
-        entry =>
-          entry.request.method != HttpMethod.CONNECT.name && !entry.request.headers.exists(
-            header => AsciiString.contentEqualsIgnoreCase(header.name, HttpHeaderValues.UPGRADE)
-          )
+      .filter(entry =>
+        entry.request.method != HttpMethod.CONNECT.name && !entry.request.headers.exists(header =>
+          AsciiString.contentEqualsIgnoreCase(header.name, HttpHeaderValues.UPGRADE)
+        )
       )
       .filter(entry => isValidURL(entry.request.url))
       .map(buildHttpTransaction)
@@ -122,8 +120,10 @@ private[recorder] object HarReader {
 
       case _ =>
         // FIXME only honor params for ApplicationFormUrlEncoded for now. Charles seems utterly broken for MultipartFormData
-        if (postData.params.nonEmpty && Option(requestHeaders.get(HttpHeaderNames.CONTENT_TYPE))
-              .exists(AsciiString.contains(_, HttpHeaderValues.APPLICATION_X_WWW_FORM_URLENCODED))) {
+        if (
+          postData.params.nonEmpty && Option(requestHeaders.get(HttpHeaderNames.CONTENT_TYPE))
+            .exists(AsciiString.contains(_, HttpHeaderValues.APPLICATION_X_WWW_FORM_URLENCODED))
+        ) {
           Some(postData.params.map(postParam => encode(postParam.name) + "=" + encode(unwrap(postParam.value))).mkString("&").getBytes(UTF_8))
 
         } else {

@@ -61,14 +61,18 @@ abstract class Workload(
     incrementScheduledUsers()
     val userId = userIdGen.incrementAndGet()
     val eventLoop = eventLoopGroup.next()
-    if (delay <= Duration.Zero) {
-      eventLoop.execute(() => startUser(userId, eventLoop))
-    } else {
-      eventLoop.schedule((() => startUser(userId, eventLoop)): Runnable, delay.toMillis, TimeUnit.MILLISECONDS)
+    if (!eventLoop.isShutdown) {
+      if (delay <= Duration.Zero) {
+        eventLoop.execute(() => startUser(userId, eventLoop))
+      } else {
+        eventLoop.schedule((() => startUser(userId, eventLoop)): Runnable, delay.toMillis, TimeUnit.MILLISECONDS)
+      }
     }
   }
 
   protected def getConcurrentUsers: Int = scheduled - stopped
+
+  def scenarioName: String = scenario.name
 
   def injectBatch(batchWindow: FiniteDuration): Unit
 
@@ -77,4 +81,8 @@ abstract class Workload(
   def isAllUsersScheduled: Boolean = allScheduled
 
   def isAllUsersStopped: Boolean = allScheduled && scheduled == stopped
+
+  def duration: FiniteDuration
+
+  def isEmpty: Boolean
 }

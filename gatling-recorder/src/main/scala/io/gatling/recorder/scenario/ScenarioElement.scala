@@ -20,8 +20,8 @@ import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Base64
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
+import scala.jdk.CollectionConverters._
 
 import io.gatling.http.client.uri.Uri
 import io.gatling.http.fetch.{ ConcurrentResource, HtmlParser }
@@ -157,7 +157,7 @@ private[recorder] final case class RequestElement(
 
   val basicAuthCredentials: Option[(String, String)] = {
     def parseCredentials(header: String) =
-      new String(Base64.getDecoder.decode(header.split(" ")(1))).split(":") match {
+      new String(Base64.getDecoder.decode(header.split(" ")(1)), UTF_8).split(":") match {
         case Array(username, password) =>
           val credentials = (username, password)
           Some(credentials)

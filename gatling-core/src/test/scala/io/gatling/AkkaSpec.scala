@@ -19,14 +19,14 @@ package io.gatling
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
+import io.gatling.core.EmptySession
+
 import akka.actor.ActorSystem
 import akka.testkit.{ ImplicitSender, TestKit }
-import org.scalatest.BeforeAndAfterAll
 
-abstract class AkkaSpec extends TestKit(ActorSystem()) with BaseSpec with ImplicitSender with BeforeAndAfterAll {
-
+abstract class AkkaSpec extends TestKit(ActorSystem()) with BaseSpec with ImplicitSender with EmptySession {
   override def afterAll(): Unit = {
     val whenTerminated = system.terminate()
-    Await.result(whenTerminated, 2 seconds)
+    Await.result(whenTerminated, 2.seconds)
   }
 }

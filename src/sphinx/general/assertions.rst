@@ -35,11 +35,11 @@ An assertion can test a statistic calculated from all requests or only a part.
 
 * ``details(path)``: use statistics calculated from a group or a request. The path is defined like a Unix filesystem path.
 
-For example, to perform an assertion on the request ``Search``, use:
+For example, to perform an assertion on the request ``MyRequest``, use:
 
 .. includecode:: code/AssertionSample.scala#details
 
-and to perform an assertion on the request ``Index`` in the group ``Search``, use:
+and to perform an assertion on the request ``MyRequest`` in the group ``MyGroup``, use:
 
 .. includecode:: code/AssertionSample.scala#details-group
 
@@ -47,8 +47,8 @@ For WebSockets it takes the name of the check and not the name of the request. `
 
 .. note::
 
-  When ``path`` is a group, assertions are made against the group's response time, not its cumulated time.
-  For more information on the distinction between groups response time and cumulated time, see :ref:`the Groups timings documentation <groups-timings>`.
+  When ``path`` is a group, assertions are matched against the cumulated response time, not the group total duration.
+  For more information on the distinction between groups cumulated response time and duration, see :ref:`the Groups timings documentation <groups-timings>`.
 
 Statistics
 ==========
@@ -114,6 +114,10 @@ Conditions can be chained to apply several conditions on the same metric.
 * ``around(value, plusOrMinus)``: check that the value of the metric is around a target value plus or minus a given margin.
 
 * ``around(value, plusOrMinus, inclusive = false)``: same as above but doesn't include bounds
+
+* ``deviatesAround(target, percentDeviationThreshold)``: check that metric is around a target value plus or minus a given relative margin
+
+* ``deviatesAround(target, percentDeviationThreshold, inclusive = false)``: same as above but doesn't include bounds
 
 * ``is(value)``: check that the value of the metric is equal to the given value.
 

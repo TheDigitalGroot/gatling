@@ -24,8 +24,8 @@ import java.security.cert.Certificate
 
 import scala.collection.mutable
 
+import io.gatling.commons.shared.unstable.util.PathHelper._
 import io.gatling.commons.util.Io._
-import io.gatling.commons.util.PathHelper._
 
 private class FileSystemBackedClassLoader(root: Path, parent: ClassLoader) extends ClassLoader(parent) {
 
@@ -62,7 +62,7 @@ private class FileSystemBackedClassLoader(root: Path, parent: ClassLoader) exten
   private def classAsStream(className: String): Option[InputStream] =
     Option(getResourceAsStream(className.replaceAll("""\.""", "/") + ".class"))
 
-  def classBytes(name: String): Array[Byte] = findPath(classNameToPath(name)) match {
+  private def classBytes(name: String): Array[Byte] = findPath(classNameToPath(name)) match {
     case Some(path) => Files.readAllBytes(path)
     case _ =>
       classAsStream(name) match {

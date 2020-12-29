@@ -118,7 +118,7 @@ private[fetch] object CssParser extends StrictLogging {
         else
           Some(string.substring(trimmedStart, trimmedEnd))
       } else {
-        logger.info(s"css url $string broken")
+        logger.debug(s"css url $string broken")
         None
       }
     }
@@ -153,13 +153,17 @@ private[fetch] object CssParser extends StrictLogging {
 
       (cssContent.charAt(i): @switch) match {
         case '/' =>
-          if (i < cssContent.length - 1 &&
-              cssContent.charAt(i + 1) == '*') {
+          if (
+            i < cssContent.length - 1 &&
+            cssContent.charAt(i + 1) == '*'
+          ) {
             withinComment = true
             i += 1
 
-          } else if (i > 0 &&
-                     cssContent.charAt(i - 1) == '*') {
+          } else if (
+            i > 0 &&
+            cssContent.charAt(i - 1) == '*'
+          ) {
             withinComment = false
           }
 

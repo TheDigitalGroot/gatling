@@ -59,14 +59,14 @@ final case class SsePerformingCheckState(
 
   override def onSseEndOfStream(timestamp: Long): NextSseState = {
     // unexpected end of stream, fail check
-    logger.info(s"Server notified of end of stream while in PerformingChecks state")
+    logger.debug(s"Server notified of end of stream while in PerformingChecks state")
     cancelTimeout()
     handleSseCheckCrash(currentCheck.name, session, next, None, "End of stream")
   }
 
   override def onSseStreamCrashed(t: Throwable, timestamp: Long): NextSseState = {
     // crash, fail check
-    logger.info("SSE stream crashed while in PerformingChecks state", t)
+    logger.debug("SSE stream crashed while in PerformingChecks state", t)
     cancelTimeout()
     handleSseCheckCrash(currentCheck.name, session, next, None, t.getMessage)
   }
@@ -117,7 +117,7 @@ final case class SsePerformingCheckState(
 
             case _ =>
               remainingCheckSequences match {
-                case SseMessageCheckSequence(timeout, newCurrentCheck :: newRemainingChecks) :: nextRemainingCheckSequences =>
+                case SseMessageCheckSequence(timeout, nextCheck :: nextRemainingChecks) :: nextRemainingCheckSequences =>
                   logger.debug("Perform next check sequence")
                   // perform next CheckSequence
                   scheduleTimeout(timeout)
@@ -126,8 +126,8 @@ final case class SsePerformingCheckState(
                   //[fl]
                   NextSseState(
                     this.copy(
-                      currentCheck = newCurrentCheck,
-                      remainingChecks = newRemainingChecks,
+                      currentCheck = nextCheck,
+                      remainingChecks = nextRemainingChecks,
                       checkSequenceStart = timestamp,
                       remainingCheckSequences = nextRemainingCheckSequences,
                       session = newSession
@@ -161,6 +161,6 @@ final case class SsePerformingCheckState(
     val newSession = logResponse(session, checkName, checkSequenceStart, clock.nowMillis, KO, code, Some(fullMessage))
     logger.debug("SSE crashed, performing next action")
 
-    NextSseState(new SseCrashedState(fsm.statsEngine, errorMessage), () => next ! newSession)
+    NextSseState(new SseCrashedState(fsm, errorMessage), () => next ! newSession)
   }
 }

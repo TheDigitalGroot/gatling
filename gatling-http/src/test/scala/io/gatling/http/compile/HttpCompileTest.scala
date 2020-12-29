@@ -17,7 +17,10 @@
 package io.gatling.http.compile
 
 import java.net.InetSocketAddress
+import java.nio.charset.StandardCharsets.UTF_8
 import javax.net.ssl.KeyManagerFactory
+
+import scala.concurrent.duration._
 
 import io.gatling.core.Predef._
 import io.gatling.http.Predef._
@@ -53,13 +56,14 @@ class HttpCompileTest extends Simulation {
     )
     .header("foo", "bar")
     .header(io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE, "bar")
+    .header(HttpHeaderNames.ContentType, "bar")
     .headers(Map("foo" -> "bar"))
     .headers(Map(io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE -> "bar"))
     .check(bodyString.transform(_.length).lt(100000))
     .check(bodyString.transformWithSession((string, session) => string.length).lte(100000))
     .check(bodyString.transformOption(stringO => stringO.map(_.length)).gt(100000))
     .check(bodyString.transformOptionWithSession((stringO, session) => stringO.map(_.length)).gte(100000))
-    .check(bodyBytes.is("foo".getBytes()))
+    .check(bodyBytes.is("foo".getBytes(UTF_8)))
     .check(md5.is("XXXXX"))
     .check(sha1.is("XXXXX"))
     .check(responseTimeInMillis.is(100))
@@ -81,6 +85,7 @@ class HttpCompileTest extends Simulation {
     .perUserNameResolution
     .localAddress("192.168.1.100")
     .localAddresses(List("192.168.1.100", "192.168.1.101"))
+    .useAllLocalAddresses
     .disableCaching
     .disableUrlEncoding
     .silentUri("https://foo\\.com/*")
@@ -104,7 +109,7 @@ class HttpCompileTest extends Simulation {
   private val testData3 = Array(Map("foo" -> "bar")).circular
 
   private val scn = scenario("Scn")
-  // method
+    // method
     .exec(http("Request").get("/"))
     .exec(http("Request").put("/"))
     .exec(http("Request").post("/"))
@@ -137,6 +142,8 @@ class HttpCompileTest extends Simulation {
     // auth
     .exec(http("Request").get("/").basicAuth("usr", "pwd"))
     .exec(http("Request").get("/").digestAuth("usr", "pwd"))
+    // requestTimeout
+    .exec(http("Request").get("/").requestTimeout(3.minutes))
     // misc
     .exec(
       http("Request").get("/").silent.notSilent.disableUrlEncoding.disableFollowRedirect.ignoreProtocolChecks.ignoreProtocolHeaders
@@ -157,6 +164,7 @@ class HttpCompileTest extends Simulation {
           currentLocationRegex("foo").find.exists,
           bodyBytes.is(Array.fill(5)(1.toByte)),
           bodyBytes.is(RawFileBody("foobar.txt")),
+          bodyLength.lte(100000),
           bodyStream.transform(is => "").saveAs("foo"),
           bodyString.is("foo"),
           bodyString.is(ElFileBody("foobar.txt")),
@@ -198,7 +206,7 @@ class HttpCompileTest extends Simulation {
           xpath("//input[@id='text1']/@value").findAll,
           xpath("//input[@id='text1']/@value").count,
           xpath("//input[@id='text1']/@value").name("This is a check"),
-          xpath("//input[@value='${aaaa_value}']/@id").saveAs("sessionParam"),
+          xpath("//input[@value='${aaaa_value}']/@id").name("foo").saveAs("sessionParam"),
           xpath("//input[@value='aaaa']/@id").not("param"),
           xpath("//input[@id='${aaaa_value}']/@value").notExists,
           xpath("//input[@id='text1']/@value").is("aaaa").saveAs("test2"),
@@ -249,6 +257,8 @@ class HttpCompileTest extends Simulation {
         .bodyPart(RawFileBodyPart("name", "path"))
         .bodyPart(ElFileBodyPart("name", "path"))
         .bodyPart(ElFileBodyPart("name", "path").contentType("foo"))
+        .bodyPart(PebbleFileBodyPart("name", "path"))
+        .bodyPart(PebbleStringBodyPart("name", "somePebbleString"))
     )
     // sign
     .exec(

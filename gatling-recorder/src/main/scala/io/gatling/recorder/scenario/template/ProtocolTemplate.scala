@@ -16,7 +16,7 @@
 
 package io.gatling.recorder.scenario.template
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.gatling.commons.util.StringHelper.Eol
 import io.gatling.recorder.config.{ FilterStrategy, RecorderConfiguration }
@@ -85,16 +85,15 @@ private[scenario] object ProtocolTemplate {
           entry.getKey -> entry.getValue
         }
         .sorted
-        .flatMap {
-          case (headerName, headerValue) =>
-            val properHeaderValue =
-              if (headerName.equalsIgnoreCase(HttpHeaderNames.ACCEPT_ENCODING.toString)) {
-                HttpUtils.filterSupportedEncodings(headerValue)
-              } else {
-                headerValue
-              }
+        .flatMap { case (headerName, headerValue) =>
+          val properHeaderValue =
+            if (headerName.equalsIgnoreCase(HttpHeaderNames.ACCEPT_ENCODING.toString)) {
+              HttpUtils.filterSupportedEncodings(headerValue)
+            } else {
+              headerValue
+            }
 
-            Option(BaseHeadersAndProtocolMethods.get(headerName)).map(renderHeader(_, properHeaderValue)).toList
+          Option(BaseHeadersAndProtocolMethods.get(headerName)).map(renderHeader(_, properHeaderValue)).toList
         }
         .mkString
     }

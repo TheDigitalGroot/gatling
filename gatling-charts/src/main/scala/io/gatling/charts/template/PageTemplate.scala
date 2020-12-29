@@ -22,7 +22,7 @@ import io.gatling.charts.FileNamingConventions
 import io.gatling.charts.component.Component
 import io.gatling.charts.config.ChartsFiles._
 import io.gatling.charts.util.HtmlHelper._
-import io.gatling.commons.stats.Group
+import io.gatling.commons.shared.unstable.model.stats.Group
 import io.gatling.commons.util.StringHelper._
 import io.gatling.core.stats.writer.RunMessage
 
@@ -43,6 +43,7 @@ private[charts] abstract class PageTemplate(title: String, isDetails: Boolean, r
 
   def jsFiles: Seq[String] = (CommonJsFiles ++ components.flatMap(_.jsFiles)).distinct
 
+  @SuppressWarnings(Array("org.wartremover.warts.ListAppend"))
   def getOutput(charset: Charset): String = {
     val runMessage = PageTemplate.runMessage
     val runStart = PageTemplate.runStart

@@ -52,7 +52,8 @@ final case class PopulationBuilder(
     scenarioProtocols: Protocols,
     scenarioThrottleSteps: Iterable[ThrottleStep],
     pauseType: Option[PauseType],
-    children: Iterable[PopulationBuilder]
+    children: Iterable[PopulationBuilder],
+    shard: Boolean
 ) extends LazyLogging {
 
   def protocols(ps: Protocol*): PopulationBuilder = protocols(ps.toIterable)
@@ -74,6 +75,8 @@ final case class PopulationBuilder(
     require(throttleSteps.nonEmpty, s"Scenario '${scenarioBuilder.name}' has an empty throttling definition.")
     copy(scenarioThrottleSteps = throttleSteps)
   }
+
+  def noShard: PopulationBuilder = copy(shard = false)
 
   @SuppressWarnings(Array("org.wartremover.warts.Recursion"))
   private[core] def build(
@@ -98,6 +101,14 @@ final case class PopulationBuilder(
 
     val childrenScenarios = children.map(_.build(coreComponents, protocolComponentsRegistries, globalPauseType, globalThrottling))
 
-    new Scenario(scenarioBuilder.name, entry, protocolComponentsRegistry.onStart, protocolComponentsRegistry.onExit, injectionProfile, ctx, childrenScenarios)
+    new Scenario(
+      scenarioBuilder.name.trim,
+      entry,
+      protocolComponentsRegistry.onStart,
+      protocolComponentsRegistry.onExit,
+      injectionProfile,
+      ctx,
+      childrenScenarios
+    )
   }
 }

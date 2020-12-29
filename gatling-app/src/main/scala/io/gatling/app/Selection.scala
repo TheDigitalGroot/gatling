@@ -87,7 +87,7 @@ object Selection {
     }
 
     private def singleSimulationFromList(simulationClasses: SimulationClasses) = simulationClasses match {
-      case simulation :: Nil =>
+      case List(simulation) =>
         println(s"${simulation.getName} is the only simulation, executing it.")
         Some(simulation)
 
@@ -101,7 +101,7 @@ object Selection {
       def readSimulationNumber(attempts: Int): Int = {
         if (attempts > MaxReadSimulationNumberAttempts) {
           println(s"Max attempts of reading simulation number ($MaxReadSimulationNumberAttempts) reached. Aborting.")
-          sys.exit()
+          sys.exit(1)
         } else {
           println("Choose a simulation number:")
           for ((simulation, index) <- simulationClasses.zipWithIndex) {
@@ -124,7 +124,7 @@ object Selection {
 
       if (simulationClasses.isEmpty) {
         println("There is no simulation script. Please check that your scripts are in user-files/simulations")
-        sys.exit()
+        sys.exit(1)
       }
       simulationClasses(readSimulationNumber(0))
     }

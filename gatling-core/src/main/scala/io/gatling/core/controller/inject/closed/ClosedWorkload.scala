@@ -30,8 +30,10 @@ import io.gatling.core.util.Shard
 import io.netty.channel.EventLoopGroup
 
 class ClosedWorkload(
-    scenario: Scenario,
     steps: Iterable[ClosedInjectionStep],
+    override val duration: FiniteDuration,
+    override val isEmpty: Boolean,
+    scenario: Scenario,
     userIdGen: AtomicLong,
     eventLoopGroup: EventLoopGroup,
     statsEngine: StatsEngine,
@@ -66,7 +68,7 @@ class ClosedWorkload(
           for {
             (number, millis) <- Shard.shards(missingUsers, batchWindow.toMillis.toInt).zipWithIndex
             if number > 0
-          } (0 until number.toInt).foreach(_ => injectUser(millis milliseconds))
+          } (0 until number.toInt).foreach(_ => injectUser(millis.milliseconds))
         }
 
       case _ => setAllScheduled()

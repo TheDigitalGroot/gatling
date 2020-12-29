@@ -32,14 +32,6 @@ class JsonPathSpec extends AnyFlatSpec with Matchers with JsonPathMatchers {
   private def double(f: Double) = DoubleNode.valueOf(f)
   private def text(s: String) = TextNode.valueOf(s)
   private def nullNode: Any = NullNode.instance
-  //  def array(elts: Any*): JList[Any] = elts.asJava
-  //  def obj(elts: (String, Any)*) = {
-  //    val node = new ObjectNode
-  //    elts.foreach { case (key, value) =>
-  //      node.put(key, value)
-  //    }
-  //    node
-  //  }
 
   // Goessner JSON exemple
 
@@ -778,7 +770,7 @@ class JsonPathSpec extends AnyFlatSpec with Matchers with JsonPathMatchers {
   //////////////
 
   "Incorrect JsonPath expressions" should "be handled properly" in {
-    JsonPath.query("€.$", goessnerJson) should be('left)
+    JsonPath.query("€.$", goessnerJson) shouldBe Symbol("left")
   }
 
   "Keys starting with number" should "be handled properly" in {

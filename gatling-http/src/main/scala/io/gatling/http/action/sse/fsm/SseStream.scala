@@ -98,9 +98,11 @@ class SseStream(
       case Open(_) =>
         logger.debug("Server closed the stream while in state Open. Reconnecting.")
         // reconnect
-        originalSession.eventLoop.schedule(new Runnable {
-          override def run(): Unit = connect()
-        }, retryDelayInSeconds, TimeUnit.SECONDS)
+        originalSession.eventLoop.schedule(
+          (() => connect()): Runnable,
+          retryDelayInSeconds,
+          TimeUnit.SECONDS
+        )
       case ProcessingClientCloseRequest(_) =>
         logger.debug("Server closed the stream while in state ProcessingClientCloseRequest.")
         state = Close
@@ -140,7 +142,7 @@ class SseStream(
       logger.debug("Sse stream crashed", throwable)
     } else {
       val errorMessage = throwable.rootMessage
-      logger.info(s"Sse stream crashed: $errorMessage")
+      logger.debug(s"Sse stream crashed: $errorMessage")
     }
 
     state match {

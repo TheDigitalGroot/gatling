@@ -22,7 +22,7 @@ import java.nio.file.{ Files, Path }
 import java.util.Optional
 import java.util.jar.{ Attributes, Manifest => JManifest }
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.io.Directory
 
 import io.gatling.compiler.config.CompilerConfiguration
@@ -69,12 +69,11 @@ object ZincCompiler extends App with ProblemStringFormats {
     classPathEntries.flatten.toArray
   }
 
-  private def jarMatching(classpath: Seq[JFile], regex: String): JFile =
+  private def jarMatching(classpath: Array[JFile], regex: String): JFile =
     classpath
-      .find(
-        file =>
-          !file.getName
-            .startsWith(".") && regex.r.findFirstMatchIn(file.getName).isDefined
+      .find(file =>
+        !file.getName
+          .startsWith(".") && regex.r.findFirstMatchIn(file.getName).isDefined
       )
       .getOrElse(
         throw new RuntimeException(s"Can't find the jar matching $regex")
@@ -226,9 +225,7 @@ object ZincCompiler extends App with ProblemStringFormats {
     }
 
     val options = CompileOptions.of(
-      (classpath :+ configuration.binariesDirectory.toFile).map(
-        file => new PlainVirtualFile(file.toPath): VirtualFile
-      ), // _classpath
+      (classpath :+ configuration.binariesDirectory.toFile).map(file => new PlainVirtualFile(file.toPath): VirtualFile), // _classpath
       sources
         .map(file => new PlainVirtualFile(file.toPath): VirtualFile), // _sources
       configuration.binariesDirectory, // _classesDirectory

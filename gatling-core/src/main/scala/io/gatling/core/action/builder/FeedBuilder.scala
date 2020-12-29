@@ -18,7 +18,7 @@ package io.gatling.core.action.builder
 
 import java.{ util => ju }
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.gatling.core.action.{ Action, Feed, FeedActor }
 import io.gatling.core.feeder.FeederBuilder
@@ -35,7 +35,7 @@ object FeedBuilder {
 class FeedBuilder(feederBuilder: FeederBuilder, number: Expression[Int]) extends ActionBuilder with NameGen {
 
   private def newFeedActor(ctx: ScenarioContext): ActorRef = {
-    val props = FeedActor.props(feederBuilder.apply, ctx.coreComponents.controller)
+    val props = FeedActor.props(feederBuilder(), ctx.coreComponents.controller)
     ctx.coreComponents.actorSystem.actorOf(props, genName("feed"))
   }
 

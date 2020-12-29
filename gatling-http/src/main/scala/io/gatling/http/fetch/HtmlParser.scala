@@ -16,11 +16,11 @@
 
 package io.gatling.http.fetch
 
-import scala.collection.{ breakOut, mutable }
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import io.gatling.commons.util.Throwables._
-import io.gatling.core.check.css.Jodd
+import io.gatling.core.check.css.Lagarto
 import io.gatling.http.client.uri.Uri
 import io.gatling.http.util.HttpHelper
 
@@ -138,15 +138,15 @@ class HtmlParser extends StrictLogging {
                   case Some(rel)
                       if CharSequenceUtil.equalsIgnoreCase(rel, IconAttributeName) || CharSequenceUtil.equalsIgnoreCase(rel, ShortcutIconAttributeName) =>
                     addResource(tag, HrefAttribute, RegularRawResource)
-                  case None =>
-                    logger.error("Malformed HTML: <link> tag without rel attribute")
                   case _ =>
                 }
 
-              } else if (tag.nameEquals(ImgTagName) ||
-                         tag.nameEquals(BgsoundTagName) ||
-                         tag.nameEquals(EmbedTagName) ||
-                         tag.nameEquals(InputTagName)) {
+              } else if (
+                tag.nameEquals(ImgTagName) ||
+                tag.nameEquals(BgsoundTagName) ||
+                tag.nameEquals(EmbedTagName) ||
+                tag.nameEquals(InputTagName)
+              ) {
 
                 addResource(tag, SrcAttribute, RegularRawResource)
 
@@ -155,7 +155,7 @@ class HtmlParser extends StrictLogging {
 
               } else if (tag.nameEquals(AppletTagName)) {
                 val code = tag.getAttributeValue(CodeAttribute).toString
-                val archives = Option(tag.getAttributeValue(ArchiveAttribute).toString).map(_.split(",").map(_.trim)(breakOut))
+                val archives = Option(tag.getAttributeValue(ArchiveAttribute)).map(_.toString.split(",").view.map(_.trim).to(Seq))
 
                 val appletResources = archives.getOrElse(code :: Nil).iterator
                 val appletResourcesUrls = codeBase() match {
@@ -192,9 +192,9 @@ class HtmlParser extends StrictLogging {
     }
 
     try {
-      Jodd.newLagartoParser(htmlContent).parse(visitor)
+      Lagarto.newLagartoParser(htmlContent).parse(visitor)
     } catch { case NonFatal(e) => logException(htmlContent, e) }
-    HtmlResources(rawResources, base)
+    HtmlResources(rawResources.toSeq, base)
   }
 
   def getEmbeddedResources(documentURI: Uri, htmlContent: Array[Char]): List[ConcurrentResource] = {
@@ -203,8 +203,9 @@ class HtmlParser extends StrictLogging {
 
     val rootURI = htmlResources.base.map(Uri.create(documentURI, _)).getOrElse(documentURI)
 
-    htmlResources.rawResources.distinct
+    htmlResources.rawResources.view.distinct
       .filterNot(res => res.rawUrl.isEmpty || res.rawUrl.charAt(0) == '#' || res.rawUrl.startsWith("data:"))
-      .flatMap(_.toEmbeddedResource(rootURI).toList)(breakOut)
+      .flatMap(_.toEmbeddedResource(rootURI).toList)
+      .to(List)
   }
 }

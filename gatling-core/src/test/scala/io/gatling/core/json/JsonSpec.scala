@@ -19,12 +19,15 @@ package io.gatling.core.json
 import java.{ util => ju }
 import java.nio.charset.StandardCharsets.UTF_8
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
+import scala.util.Using
 
 import io.gatling.BaseSpec
 import io.gatling.commons.util.Io
 import io.gatling.core.json.Json._
+
+private final case class Foo(bar: String, baz: Int)
 
 class JsonSpec extends BaseSpec {
 
@@ -82,7 +85,10 @@ class JsonSpec extends BaseSpec {
   }
 
   it should "be able to stringify Scala maps with double quoted string values" in {
-    stringify(Map(1 -> """Double quoted "Foo"""", "bar" -> 4.5, "toto" -> Seq(1, 2)), isRootObject = true) shouldBe """{"1":"Double quoted \"Foo\"","bar":4.5,"toto":[1,2]}"""
+    stringify(
+      Map(1 -> """Double quoted "Foo"""", "bar" -> 4.5, "toto" -> Seq(1, 2)),
+      isRootObject = true
+    ) shouldBe """{"1":"Double quoted \"Foo\"","bar":4.5,"toto":[1,2]}"""
   }
 
   it should "be able to stringify Java maps" in {
@@ -100,8 +106,13 @@ class JsonSpec extends BaseSpec {
     stringify(map, isRootObject = true) shouldBe """{"name":"frodo","note":null}"""
   }
 
+  it should "support case classes" in {
+    val foo = Foo("hello", 1)
+    stringify(foo, isRootObject = true) shouldBe """{"bar":"hello","baz":1}"""
+  }
+
   "asScala" should "deep convert into Scala structures" in {
-    val input = Io.withCloseable(Thread.currentThread().getContextClassLoader.getResourceAsStream("test.json")) { is =>
+    val input = Using.resource(Thread.currentThread().getContextClassLoader.getResourceAsStream("test.json")) { is =>
       new JsonParsers().parse(is, UTF_8)
     }
 

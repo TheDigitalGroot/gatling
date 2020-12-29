@@ -20,8 +20,8 @@ import java.io.InputStream
 import java.net.URL
 import java.nio.charset.Charset
 
-import scala.collection._
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
+import scala.util.Using
 
 import io.gatling.commons.util.Io._
 import io.gatling.core.json.{ Json, JsonParsers }
@@ -30,12 +30,12 @@ import io.gatling.core.util.Resource
 class JsonFeederFileParser(jsonParsers: JsonParsers) {
 
   def parse(resource: Resource, charset: Charset): IndexedSeq[Record[Any]] =
-    withCloseable(resource.inputStream) { is =>
+    Using.resource(resource.inputStream) { is =>
       stream(is, charset).toVector
     }
 
   def url(url: String, charset: Charset): IndexedSeq[Record[Any]] =
-    withCloseable(new URL(url).openStream) { is =>
+    Using.resource(new URL(url).openStream) { is =>
       stream(is, charset).toVector
     }
 

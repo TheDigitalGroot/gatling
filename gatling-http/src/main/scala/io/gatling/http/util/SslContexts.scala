@@ -16,12 +16,12 @@
 
 package io.gatling.http.util
 
-import java.io.Closeable
+import java.{ util => ju }
 import java.security.SecureRandom
 import javax.net.ssl._
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 
 import io.gatling.core.config.SslConfiguration
 
@@ -47,9 +47,6 @@ private[gatling] class SslContextsFactory(sslConfig: SslConfiguration) extends S
 
   import SslContextsFactory._
 
-  private val sslSessionTimeoutSeconds = sslConfig.sessionTimeout.toSeconds
-  private val enabledProtocols: Array[String] = sslConfig.enabledProtocols.toArray
-  private val enabledCipherSuites = sslConfig.enabledCipherSuites.asJava
   private val useOpenSsl =
     if (sslConfig.useOpenSsl) {
       val available = OpenSsl.isAvailable
@@ -60,6 +57,27 @@ private[gatling] class SslContextsFactory(sslConfig: SslConfiguration) extends S
     } else {
       false
     }
+  private val sslSessionTimeoutSeconds = sslConfig.sessionTimeout.toSeconds
+  private lazy val DefaultJavaSslParameters = {
+    val context = SSLContext.getInstance("TLS")
+    context.init(null, null, null);
+    context.getDefaultSSLParameters
+  }
+  private val enabledProtocols: Array[String] =
+    if (useOpenSsl) {
+      sslConfig.enabledProtocols.toArray
+    } else {
+      val supportedProtocols = DefaultJavaSslParameters.getProtocols.toSet
+      sslConfig.enabledProtocols.toArray.filter(supportedProtocols.contains)
+    }
+  private val enabledCipherSuites: ju.List[String] = {
+    if (useOpenSsl) {
+      sslConfig.enabledCipherSuites.asJava
+    } else {
+      val supportedCipherSuites = DefaultJavaSslParameters.getCipherSuites
+      sslConfig.enabledCipherSuites.filter(supportedCipherSuites.contains).asJava
+    }
+  }
   private val useOpenSslFinalizers = sslConfig.useOpenSslFinalizers
 
   def newSslContexts(http2Enabled: Boolean, perUserKeyManagerFactory: Option[KeyManagerFactory]): SslContexts = {
@@ -135,7 +153,7 @@ private[gatling] class SslContextsFactory(sslConfig: SslConfiguration) extends S
     )
 }
 
-private[http] final class SslContexts(val sslContext: SslContext, val alpnSslContext: Option[SslContext]) extends Closeable {
+private[http] final class SslContexts(val sslContext: SslContext, val alpnSslContext: Option[SslContext]) extends AutoCloseable {
   override def close(): Unit = {
     ReferenceCountUtil.release(sslContext)
     alpnSslContext.foreach(ReferenceCountUtil.release)

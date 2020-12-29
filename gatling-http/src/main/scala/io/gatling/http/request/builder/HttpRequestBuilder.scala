@@ -18,7 +18,7 @@ package io.gatling.http.request.builder
 
 import java.security.MessageDigest
 
-import scala.collection.breakOut
+import scala.concurrent.duration.FiniteDuration
 
 import io.gatling.core.body.{ Body, RawFileBodies }
 import io.gatling.core.check.ChecksumCheck
@@ -48,7 +48,8 @@ object HttpAttributes {
       body = None,
       bodyParts = Nil,
       formParams = Nil,
-      form = None
+      form = None,
+      requestTimeout = None
     )
 }
 
@@ -62,7 +63,8 @@ final case class HttpAttributes(
     body: Option[Body],
     bodyParts: List[BodyPart],
     formParams: List[HttpParam],
-    form: Option[Expression[Map[String, Any]]]
+    form: Option[Expression[Map[String, Any]]],
+    requestTimeout: Option[FiniteDuration]
 )
 
 object HttpRequestBuilder {
@@ -134,6 +136,9 @@ final case class HttpRequestBuilder(commonAttributes: CommonAttributes, httpAttr
   def formUpload(name: Expression[String], filePath: Expression[String])(implicit rawFileBodies: RawFileBodies): HttpRequestBuilder =
     bodyPart(BodyPart.rawFileBodyPart(Some(name), filePath, rawFileBodies))
 
+  def requestTimeout(timeout: FiniteDuration): HttpRequestBuilder =
+    this.modify(_.httpAttributes.requestTimeout).setTo(Some(timeout))
+
   @SuppressWarnings(Array("org.wartremover.warts.Recursion"))
   def build(httpCaches: HttpCaches, httpProtocol: HttpProtocol, throttled: Boolean, configuration: GatlingConfiguration): HttpRequestDef = {
 
@@ -152,11 +157,11 @@ final case class HttpRequestBuilder(commonAttributes: CommonAttributes, httpAttr
       else requestAndProtocolChecks ::: List(RequestBuilder.DefaultHttpCheck)
 
     val sortedChecks = checks.zipWithIndex
-      .sortBy {
-        case (check, rank) => (check.scope, rank)
+      .sortBy { case (check, rank) =>
+        (check.scope, rank)
       }
-      .map {
-        case (check, _) => check
+      .map { case (check, _) =>
+        check
       }
 
     val resolvedFollowRedirect = httpProtocol.responsePart.followRedirect && httpAttributes.followRedirect
@@ -170,7 +175,8 @@ final case class HttpRequestBuilder(commonAttributes: CommonAttributes, httpAttr
     val digests: Map[String, MessageDigest] =
       sortedChecks
         .map(_.wrapped)
-        .collect { case check: ChecksumCheck[_] => check.algorithm -> MessageDigest.getInstance(check.algorithm) }(breakOut)
+        .collect { case check: ChecksumCheck[_] => check.algorithm -> MessageDigest.getInstance(check.algorithm) }
+        .toMap
 
     val storeBodyParts = IsHttpDebugEnabled ||
       // we can't assume anything about if and how the response body will be used,

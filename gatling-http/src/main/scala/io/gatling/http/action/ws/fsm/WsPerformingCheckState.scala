@@ -17,6 +17,7 @@
 package io.gatling.http.action.ws.fsm
 
 import io.gatling.commons.stats.{ KO, OK, Status }
+import io.gatling.commons.util.Throwables._
 import io.gatling.commons.validation.{ Failure, Success }
 import io.gatling.core.action.Action
 import io.gatling.core.check.Check
@@ -85,7 +86,7 @@ final case class WsPerformingCheckState(
         tryApplyingChecks(message, timestamp, matchConditions, checks)
 
       case _ =>
-        logger.debug(s"Received unmatched binary frame $message")
+        logger.debug("Received unmatched binary frame")
         // server unmatched message, just log
         logUnmatchedServerMessage(session)
         NextWsState(this)
@@ -159,18 +160,17 @@ final case class WsPerformingCheckState(
 
             case _ =>
               remainingCheckSequences match {
-                case WsFrameCheckSequence(timeout, newCurrentCheck :: newRemainingChecks) :: nextRemainingCheckSequences =>
+                case WsFrameCheckSequence(timeout, nextCheck :: nextRemainingChecks) :: nextRemainingCheckSequences =>
                   logger.debug("Perform next check sequence")
                   // perform next CheckSequence
                   scheduleTimeout(timeout)
                   //[fl]
                   //
                   //[fl]
-
                   NextWsState(
                     this.copy(
-                      currentCheck = newCurrentCheck,
-                      remainingChecks = newRemainingChecks,
+                      currentCheck = nextCheck,
+                      remainingChecks = nextRemainingChecks,
                       checkSequenceStart = timestamp,
                       remainingCheckSequences = nextRemainingCheckSequences,
                       session = newSession
@@ -206,6 +206,7 @@ final case class WsPerformingCheckState(
       code: Option[String],
       errorMessage: String
   ): NextWsState = {
+    cancelTimeout()
     val fullMessage = s"WebSocket crashed while waiting for check: $errorMessage"
 
     val newSession = logCheckResult(session, clock.nowMillis, KO, code, Some(fullMessage))

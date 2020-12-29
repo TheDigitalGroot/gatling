@@ -18,7 +18,7 @@ package io.gatling.http.request.builder
 
 import java.nio.charset.Charset
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import io.gatling.commons.util.Throwables._
@@ -124,10 +124,6 @@ abstract class RequestExpressionBuilder(
     }
   }
 
-  // note: DNS cache is supposed to be set early
-  private def configureNameResolver(session: Session, requestBuilder: ClientRequestBuilder): Unit =
-    httpCaches.nameResolver(session).foreach(requestBuilder.setNameResolver)
-
   private val proxy = commonAttributes.proxy.orElse(httpProtocol.proxyPart.proxy)
 
   private def configureProxy(requestBuilder: ClientRequestBuilder): Unit =
@@ -216,16 +212,21 @@ abstract class RequestExpressionBuilder(
       case _ => ConfigureIdentity
     }
 
-  protected def configureRequestBuilder(session: Session, requestBuilder: ClientRequestBuilder): Validation[ClientRequestBuilder] = {
+  protected def configureRequestTimeout(requestBuilder: ClientRequestBuilder): Unit
+
+  protected def configureRequestBuilderForProtocol: RequestBuilderConfigure
+
+  private def configureRequestBuilder(session: Session, requestBuilder: ClientRequestBuilder): Validation[ClientRequestBuilder] = {
     configureProxy(requestBuilder)
+    configureRequestTimeout(requestBuilder)
     configureCookies(session, requestBuilder)
-    configureNameResolver(session, requestBuilder)
     configureLocalAddress(session, requestBuilder)
 
     configureVirtualHost(session)(requestBuilder)
       .flatMap(configureHeaders(session))
       .flatMap(configureRealm(session))
       .flatMap(configureSignatureCalculator(session))
+      .flatMap(configureRequestBuilderForProtocol(session))
   }
 
   def build: Expression[Request] =
@@ -233,9 +234,8 @@ abstract class RequestExpressionBuilder(
       safely(BuildRequestErrorMapper) {
         for {
           uri <- buildURI(session)
-          requestBuilder = new ClientRequestBuilder(commonAttributes.method, uri)
-            .setDefaultCharset(charset)
-            .setRequestTimeout(configuration.http.requestTimeout.toMillis)
+          nameResolver <- httpCaches.nameResolver(session) // note: DNS cache is supposed to be set early
+          requestBuilder = new ClientRequestBuilder(commonAttributes.method, uri, nameResolver).setDefaultCharset(charset)
           rb <- configureRequestBuilder(session, requestBuilder)
         } yield rb.build
       }

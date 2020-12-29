@@ -76,7 +76,7 @@ class Tracker(statsEngine: StatsEngine, clock: Clock, replyTimeoutScanPeriod: Fi
   private def triggerPeriodicTimeoutScan(): Unit =
     if (!periodicTimeoutScanTriggered) {
       periodicTimeoutScanTriggered = true
-      timers.startTimerWithFixedDelay("timeoutTimer", TimeoutScan, replyTimeoutScanPeriod)
+      timers.startTimerAtFixedRate("timeoutTimer", TimeoutScan, replyTimeoutScanPeriod)
     }
 
   override def receive: Receive = {
@@ -90,9 +90,8 @@ class Tracker(statsEngine: StatsEngine, clock: Clock, replyTimeoutScanPeriod: Fi
     // message was received; publish stats and remove from the hashmap
     case MessageReceived(matchId, received, message) =>
       // if key is missing, message was already acked and is a dup, or request timedout
-      sentMessages.remove(matchId).foreach {
-        case MessageSent(_, sent, _, checks, session, next, requestName) =>
-          processMessage(session, sent, received, checks, message, next, requestName)
+      sentMessages.remove(matchId).foreach { case MessageSent(_, sent, _, checks, session, next, requestName) =>
+        processMessage(session, sent, received, checks, message, next, requestName)
       }
 
     case TimeoutScan =>

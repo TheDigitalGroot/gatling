@@ -66,7 +66,7 @@ class ConsoleDataWriter(clock: Clock, configuration: GatlingConfiguration) exten
 
     scenarios.foreach(scenario => data.usersCounters.put(scenario.name, new UserCounters(scenario.totalUserCount)))
 
-    startTimerWithFixedDelay(flushTimerName, Flush, configuration.data.console.writePeriod)
+    startTimerAtFixedRate(flushTimerName, Flush, configuration.data.console.writePeriod)
 
     data
   }
@@ -109,6 +109,7 @@ class ConsoleDataWriter(clock: Clock, configuration: GatlingConfiguration) exten
     }
   }
 
+  @SuppressWarnings(Array("org.wartremover.warts.ListAppend"))
   private def onResponseMessage(response: ResponseMessage, data: ConsoleData): Unit = {
     import data._
     import response._

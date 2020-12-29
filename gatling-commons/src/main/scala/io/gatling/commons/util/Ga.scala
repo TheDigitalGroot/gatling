@@ -24,13 +24,13 @@ import javax.net.ssl.HttpsURLConnection
 
 import scala.concurrent._
 import scala.util.Properties._
-
-import io.gatling.commons.util.Io._
+import scala.util.Using
 
 object Ga {
 
   private[this] def encode(string: String) = URLEncoder.encode(string, UTF_8.name)
 
+  @SuppressWarnings(Array("org.wartremover.warts.GlobalExecutionContext"))
   def send(version: String): Unit = {
     import ExecutionContext.Implicits.global
 
@@ -62,12 +62,12 @@ object Ga {
           conn.setRequestProperty("Host", "ssl.google-analytics.com")
           conn.setRequestProperty("User-Agent", s"java/$javaVersion")
 
-          withCloseable(conn.getOutputStream) { os =>
+          Using.resource(conn.getOutputStream) { os =>
             os.write(bodyBytes)
             os.flush()
 
             // get response before closing
-            withCloseable(new BufferedInputStream(conn.getInputStream)) { rd =>
+            Using.resource(new BufferedInputStream(conn.getInputStream)) { rd =>
               var byte: Int = -1
               do {
                 byte = rd.read

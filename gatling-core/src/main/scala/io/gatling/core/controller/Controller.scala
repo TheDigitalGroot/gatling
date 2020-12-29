@@ -51,20 +51,19 @@ class Controller(statsEngine: StatsEngine, injector: ActorRef, throttler: Option
 
   startWith(WaitingToStart, NoData)
 
-  when(WaitingToStart) {
-    case Event(Start(scenarios), NoData) =>
-      val initData = InitData(sender(), scenarios)
+  when(WaitingToStart) { case Event(Start(scenarios), NoData) =>
+    val initData = InitData(sender(), scenarios)
 
-      simulationParams.maxDuration.foreach { maxDuration =>
-        logger.debug("Setting up max duration")
-        startSingleTimer(maxDurationTimer, MaxDurationReached(maxDuration), maxDuration)
-      }
+    simulationParams.maxDuration.foreach { maxDuration =>
+      logger.debug("Setting up max duration")
+      startSingleTimer(maxDurationTimer, MaxDurationReached(maxDuration), maxDuration)
+    }
 
-      throttler.foreach(_.start())
-      statsEngine.start()
-      injector ! InjectorCommand.Start(self, initData.scenarios)
+    throttler.foreach(_.start())
+    statsEngine.start()
+    injector ! InjectorCommand.Start(self, initData.scenarios)
 
-      goto(Started) using StartedData(initData)
+    goto(Started) using StartedData(initData)
   }
 
   when(Started) {
@@ -98,11 +97,11 @@ class Controller(statsEngine: StatsEngine, injector: ActorRef, throttler: Option
 
   when(WaitingForResourcesToStop) {
     case Event(StatsEngineStopped, data: EndData) =>
-      logger.info("StatsEngineStopped")
+      logger.debug("StatsEngine was stopped")
       stop(data)
 
     case Event(Kill, data: EndData) =>
-      logger.error("Kill")
+      logger.error("Kill order received")
       stop(data)
 
     case Event(message, _) =>
@@ -118,10 +117,9 @@ class Controller(statsEngine: StatsEngine, injector: ActorRef, throttler: Option
 
   // -- STEP 4 : Controller has been stopped, all new messages will be discarded -- //
 
-  when(Stopped) {
-    case Event(message, NoData) =>
-      logger.debug(s"Ignore message $message since Controller has been stopped")
-      stay()
+  when(Stopped) { case Event(message, NoData) =>
+    logger.debug(s"Ignore message $message since Controller has been stopped")
+    stay()
   }
 
   initialize()

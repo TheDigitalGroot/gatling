@@ -20,10 +20,10 @@ import java.{ util => ju }
 import java.nio.charset.Charset
 
 import io.gatling.commons.validation.Validation
-import io.gatling.core.body.{ ElBody, ElFileBodies, RawFileBodies, ResourceAndCachedBytes }
+import io.gatling.core.body._
 import io.gatling.core.session._
 import io.gatling.http.client.Param
-import io.gatling.http.client.body.multipart.{ ByteArrayPart, FilePart, Part, StringPart }
+import io.gatling.http.client.body.multipart._
 
 import com.softwaremill.quicklens._
 
@@ -43,6 +43,17 @@ object BodyPart {
       elFileBodies: ElFileBodies
   ): BodyPart =
     stringBodyPart(name, new ElBody(elFileBodies.parse(filePath)), defaultCharset)
+
+  def pebbleStringBodyPart(name: Option[Expression[String]], string: String, defaultCharset: Charset): BodyPart =
+    stringBodyPart(name, PebbleStringBody(string, defaultCharset), defaultCharset)
+
+  def pebbleFileBodyPart(
+      name: Option[Expression[String]],
+      filePath: Expression[String],
+      defaultCharset: Charset,
+      pebbleFileBodies: PebbleFileBodies
+  ): BodyPart =
+    stringBodyPart(name, PebbleFileBody(filePath, pebbleFileBodies, defaultCharset), defaultCharset)
 
   def stringBodyPart(name: Option[Expression[String]], string: Expression[String], defaultCharset: Charset): BodyPart =
     BodyPart(name, stringBodyPartBuilder(string, defaultCharset), BodyPartAttributes.Empty)
@@ -206,13 +217,14 @@ final case class BodyPart(
       fileName <- resolveOptionalExpression(attributes.fileName, session)
       contentId <- resolveOptionalExpression(attributes.contentId, session)
       customHeaders <- attributes.customHeadersExpression(session)
-      customHeadersAsParams = if (customHeaders.nonEmpty) {
-        val params = new ju.ArrayList[Param](customHeaders.size)
-        customHeaders.foreach { case (headerName, value) => params.add(new Param(headerName, value)) }
-        params
-      } else {
-        ju.Collections.emptyList[Param]
-      }
+      customHeadersAsParams =
+        if (customHeaders.nonEmpty) {
+          val params = new ju.ArrayList[Param](customHeaders.size)
+          customHeaders.foreach { case (headerName, value) => params.add(new Param(headerName, value)) }
+          params
+        } else {
+          ju.Collections.emptyList[Param]
+        }
       part <- partBuilder(
         name.orNull,
         attributes.charset,
